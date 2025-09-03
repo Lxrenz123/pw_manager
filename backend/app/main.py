@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-
+from routers import user_router
 
 app = FastAPI(title="Password Manager", root_path="/api")
 
@@ -28,3 +28,9 @@ def get_item(item_id: int) -> Item:
         return requesteditem
     else:
         raise HTTPException(status_code=404, detail=f"Item {item_id} not found")
+
+
+routers = [user_router.router]
+
+for router in routers:
+    app.include_router(router)

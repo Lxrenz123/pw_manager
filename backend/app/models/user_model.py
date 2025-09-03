@@ -15,3 +15,5 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, server_default=func.now(), nullable=False
     )
+
+    
