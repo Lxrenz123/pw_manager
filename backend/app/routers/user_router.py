@@ -5,26 +5,15 @@ from pydantic import BaseModel
 from models import user_model
 from auth import hash_password
 from database import PgAsyncSession
+from schemas import user_schema
 
-class CreateUser(BaseModel):
-    email: str
-    password: str
-
-    class Config:
-        orm_mode = True  
-
-class UserOut(BaseModel):
-    id: int
-    email: str
-    class Config:
-        orm_mode = True  
 router = APIRouter(
     prefix="/users",
     tags=["User"],
 )
 
-@router.post("/", response_model=UserOut)
-async def create_user(user_create: CreateUser, session: PgAsyncSession):
+@router.post("/", response_model=user_schema.UserOut)
+async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSession):
     stmt = select(user_model.User).where(user_model.User.email == user_create.email)
     result = await session.execute(stmt)
     existing_user = result.scalars().first()
@@ -39,3 +28,4 @@ async def create_user(user_create: CreateUser, session: PgAsyncSession):
         await session.commit()
         await session.refresh(db_user)
         return db_user
+
