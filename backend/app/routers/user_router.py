@@ -1,14 +1,14 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from models import user_model
-from auth import hash_password
+from auth import hash_password, get_current_user
 from database import PgAsyncSession
 from schemas import user_schema
 
 router = APIRouter(
-    prefix="/users",
+    prefix="/user",
     tags=["User"],
 )
 
@@ -28,4 +28,10 @@ async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSessi
         await session.commit()
         await session.refresh(db_user)
         return db_user
+
+@router.get("/me", response_model=user_schema.UserOut)
+async def read_me(current_user: user_model.User = Depends(get_current_user)):
+    return current_user
+
+    
 

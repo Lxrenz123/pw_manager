@@ -25,8 +25,8 @@ async def login(session: PgAsyncSession, credentials: auth_schema.Credentials):
         raise HTTPException(status_code=400, detail="Login failed")
 
     auth_response = auth_schema.AuthResponse(
-    access_token=create_access_token(email),
-    user=user_schema.User.model_validate(db_user.__dict__)
+    access_token=create_access_token(db_user.id),
+    user=user_schema.UserOut.model_validate(db_user.__dict__)
     )
 
     return auth_response

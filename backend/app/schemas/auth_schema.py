@@ -4,7 +4,7 @@ from schemas import user_schema
 
 class AuthResponse(BaseModel):
     access_token: str
-    user: user_schema.User
+    user: user_schema.UserOut
     token_type: str = "Bearer"
 
 class Credentials(BaseModel):
