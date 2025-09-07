@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 
 class CreateVault(BaseModel):
-    vaultname: str
+    name: str
 
 class GetVault(BaseModel):
     name: str

@@ -19,15 +19,15 @@ async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSessi
     existing_user = result.scalars().first()
     if existing_user:
         raise HTTPException(status_code=400, detail=f"The email {user_create.email} is not available")
-    else:
-        db_user = user_model.User(
-        email = user_create.email,
-        password = hash_password(user_create.password)
-        )
-        session.add(db_user)
-        await session.commit()
-        await session.refresh(db_user)
-        return db_user
+    
+    db_user = user_model.User(
+    email = user_create.email,
+    password = hash_password(user_create.password)
+    )
+    session.add(db_user)
+    await session.commit()
+    await session.refresh(db_user)
+    return db_user
 
 @router.get("/me", response_model=user_schema.UserOut)
 async def read_me(current_user: user_model.User = Depends(get_current_user)):

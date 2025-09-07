@@ -1,11 +1,14 @@
 <script>
+    import { apiBase } from "../script/api-base-url";
+
+
     let email = "";
     let password = "";
     let result;
 
 async function register(){
 
-    const response = await fetch('http://127.0.0.1:8000/api/user/', {
+    const response = await fetch(`${apiBase}/user/`, {
         method: "POST",
         headers: {
         'Content-Type': "application/json",

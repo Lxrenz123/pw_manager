@@ -1,14 +1,14 @@
 <script>
     import { navigate } from "svelte-routing";
-
+    import { apiBase } from "../script/api-base-url";
 
     let email = "";
     let password = "";
-    let result;
-    let test;
+    let result = "";
+
 
     async function login(){
-    const response = await fetch('http://127.0.0.1:8000/api/auth/login', {
+    const response = await fetch( `${apiBase}auth/login`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
