@@ -3,7 +3,6 @@
     import { apiBase } from "../script/api-base-url";
     
     let vaults = $state([]);
-    let noVaults;
     let vaultName = $state("");
 
     onMount(async () => {
@@ -55,7 +54,7 @@ async function addVault(){
 
 {#each vaults as vault}
     <div class="vault-item">
-        <h3>{vault.name}</h3>
+        <button>{vault.name}</button>
     </div>
 {/each}
 
