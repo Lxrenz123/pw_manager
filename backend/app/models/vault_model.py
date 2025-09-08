@@ -2,6 +2,8 @@ from sqlalchemy import Integer, String, ForeignKey, DateTime, func
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
 from database import Base
+from .secret_model import Secret
+from typing import List
 
 class Vault(Base):
     __tablename__ = "vault"
@@ -12,3 +14,4 @@ class Vault(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now(), nullable=False)
     
     owner: Mapped["User"] = relationship(back_populates="vault")
+    secret: Mapped[List[Secret]] = relationship(back_populates="vault", cascade="all, delete-orphan")
