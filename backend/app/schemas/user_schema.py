@@ -24,3 +24,8 @@ class User(BaseModel):
     id: int
     email: str
 
+class UpdateUserEmail(BaseModel):
+    email: str
+
+class UpdateUserPassword(BaseModel):
+    password: str

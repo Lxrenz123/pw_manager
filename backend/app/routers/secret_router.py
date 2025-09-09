@@ -66,6 +66,43 @@ async def get_secret(session: PgAsyncSession, vault_id: int, user: user_model.Us
     result = await session.execute(stmt)
     secrets = result.scalars().all()
 
-
-
     return secrets
+
+
+@router.patch("/{secret_id}")
+async def update_secret(session: PgAsyncSession, secret_id: int, secret_data: secret_schema.UpdateSecret, user: user_model.User = Depends(get_current_user)):
+    stmt = select(secret_model.Secret).join(vault_model.Vault).where(secret_model.Secret.id == secret_id, vault_model.Vault.owner_id == user.id)
+    result = await session.execute(stmt)
+    secret = result.scalars().first()
+
+
+    if not secret:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    if secret_data.title not in (None, ""):
+        secret.title = secret_data.title
+    if secret_data.data_encrypted not in (None, ""):
+        secret.data_encrypted = secret_data.data_encrypted
+    try:
+        await session.commit()
+        await session.refresh(secret)
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail="An error occurred while updating the secret")
+
+
+    return secret
+
+@router.delete("/{secret_id}")
+async def delete_secret(session: PgAsyncSession, secret_id: int, user: user_model.User = Depends(get_current_user)):
+    stmt = select(secret_model.Secret).join(vault_model.Vault).where(secret_model.Secret.id == secret_id, vault_model.Vault.owner_id == user.id)
+    result = await session.execute(stmt)
+    secret_to_delete = result.scalars().first()
+
+    if not secret_to_delete:
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    await session.delete(secret_to_delete)
+    await session.commit()
+
+    return f"Successfully deleted secret {secret_to_delete.title}"

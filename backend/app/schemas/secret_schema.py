@@ -4,3 +4,7 @@ class CreateSecret(BaseModel):
     title: str
     data_encrypted: bytes
 
+class UpdateSecret(BaseModel):
+    title: str
+    data_encrypted: bytes
+    
