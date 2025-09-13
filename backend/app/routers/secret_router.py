@@ -32,7 +32,11 @@ async def create_secret(session: PgAsyncSession, vault_id: int, secret_type: str
             detail=f"Invalid secret type '{secret_type}'. Valid types are: {valid_types}"
         )
     
-    stmt = select(secret_model.Secret).where(secret_model.Secret.title == secret_data.title, vault.id == vault_id)
+    stmt = select(secret_model.Secret).join(vault_model.Vault).where(
+            secret_model.Secret.title == secret_data.title, 
+            secret_model.Secret.vault_id == vault_id, 
+            vault_model.Vault.owner_id == user.id
+        )
     result = await session.execute(stmt)
     existing_secret = result.scalars().first()
 
@@ -43,7 +47,10 @@ async def create_secret(session: PgAsyncSession, vault_id: int, secret_type: str
         type = secret_type_enum,
         title = secret_data.title,
         data_encrypted = secret_data.data_encrypted,
-        vault_id = vault_id
+        vault_id = vault_id,
+        encrypted_secret_key = secret_data.encrypted_secret_key,
+        secret_iv = secret_data.secret_iv,
+        secret_key_iv = secret_data.secret_key_iv
     )
     session.add(secret)
     await session.commit()
@@ -67,6 +74,22 @@ async def get_secret(session: PgAsyncSession, vault_id: int, user: user_model.Us
     secrets = result.scalars().all()
 
     return secrets
+
+
+@router.get("/")
+async def get_all_secrets(session: PgAsyncSession, user: user_model.User = Depends(get_current_user)):
+
+    stmt = select(secret_model.Secret).join(vault_model.Vault).where(vault_model.Vault.owner_id == user.id)
+    result = await session.execute(stmt)
+    user_secrets = result.scalars().all()
+
+    if not user_secrets:
+        raise HTTPException(status_code=404, detail="No secrets found")
+    
+    return user_secrets
+    
+
+
 
 
 @router.patch("/{secret_id}")

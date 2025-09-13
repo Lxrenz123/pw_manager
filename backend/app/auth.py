@@ -10,8 +10,14 @@ from fastapi.security import OAuth2PasswordBearer
 from database import get_db
 from models import user_model
 from sqlalchemy import select
+import time
+import pyotp
 
 load_dotenv()
+
+OTP_KEY = os.getenv("OTP_KEY")
+
+totp = pyotp.TOTP(OTP_KEY)
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")

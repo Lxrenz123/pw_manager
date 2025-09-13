@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, String, ForeignKey, DateTime, func
+from sqlalchemy import Integer, String, ForeignKey, DateTime, func, LargeBinary
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
 from typing import List
@@ -12,4 +12,7 @@ class User(Base):
     password: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, server_default=func.now(), nullable=False)
 
+    user_key: Mapped[str] = mapped_column(String, nullable=True) #nullabletrue später in false ändern nur zum testen
+    salt: Mapped[str] = mapped_column(String, nullable=True) #nullabletrue später in false ändern nur zum testen
+    iv: Mapped[str] = mapped_column(String, nullable=True)
     vault: Mapped[List["Vault"]] = relationship(back_populates="owner", cascade="all, delete-orphan")

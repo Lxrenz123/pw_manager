@@ -1,11 +1,13 @@
+
 <script>
   import { Router, Link, Route, navigate } from "svelte-routing";
   import Register from './pages/Register.svelte';
   import Login from './pages/Login.svelte'; 
   import App from './pages/App.svelte';
   import MFA from './pages/MFA.svelte';
-</script>
+  import { documentSchema, noteSchema, credentialSchema} from './script/schema.js'
 
+</script>
 
 
 

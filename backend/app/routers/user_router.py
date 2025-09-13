@@ -22,8 +22,11 @@ async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSessi
         raise HTTPException(status_code=400, detail=f"The email {user_create.email} is not available")
     
     db_user = user_model.User(
-    email = user_create.email,
-    password = hash_password(user_create.password)
+        email=user_create.email,
+        password=hash_password(user_create.password),
+        user_key=user_create.user_key,
+        salt=user_create.salt,
+        iv=user_create.iv
     )
     session.add(db_user)
     await session.commit()
