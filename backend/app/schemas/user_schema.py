@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
+from datetime import datetime, timezone
+from typing import Optional
 
 class CreateUser(BaseModel):
     email: str
@@ -16,6 +18,21 @@ class UserOut(BaseModel):
 
     class Config:
         orm_mode = True  
+
+class UserOutInfoMe(BaseModel):
+    id: int
+    email: str
+    created_at: datetime
+    last_login: datetime
+    mfa_enabled: bool
+
+    @validator('mfa_enabled', pre=True)
+    def convert_none_to_false(cls, v):
+        return False if v is None else v
+
+    class Config:
+        orm_mode = True  
+
 
 
 class UserLogin(BaseModel):

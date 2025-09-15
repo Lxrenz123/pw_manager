@@ -7,21 +7,22 @@ import os
 from jose import jwt, JWTError, ExpiredSignatureError
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
-from database import get_db
-from models import user_model
+from app.database import get_db
+from app.models import user_model
 from sqlalchemy import select
 import time
-import pyotp
+
 
 load_dotenv()
 
 OTP_KEY = os.getenv("OTP_KEY")
 
-totp = pyotp.TOTP(OTP_KEY)
+
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 TOKEN_EXPIRE_MINUTES = os.getenv("JWT_TOKEN_EXPIRE")
+PREAUTH_TOKEN_EXPIRE = os.getenv("PREAUTH_TOKEN_EXPIRE")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -38,6 +39,10 @@ def create_access_token(user_id: int):
     data = {"sub": str(user_id), "exp": expire}
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
+def create_preauth_token(user_id: int):
+    expire = datetime.utcnow() + timedelta(minutes=int(PREAUTH_TOKEN_EXPIRE))
+    data = {"sub": str(user_id), "2fa": "pending", "exp": expire }
+    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(get_db)):
     error = HTTPException(status_code=401, detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"})
@@ -48,6 +53,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSe
     except JWTError:
         raise error
     
+    if payload.get("2fa") == "pending":
+        raise HTTPException(status_code=403, detail="2FA verification required")
+    
     user_id = payload.get("sub")
     if user_id is None:
         raise error
@@ -57,3 +65,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSe
     if user is None:
         raise error
     return user
+
+
+def verify_preauth_token(preauth_token):
+    try:
+        payload = jwt.decode(preauth_token, SECRET_KEY, algorithms=[ALGORITHM])
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Session expired, login again")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid preauth token")
+
+    if payload.get("2fa") != "pending":
+        raise HTTPException(status_code=401, detail="Invalid preauth token")
+    
+    return int(payload.get("sub"))
+    

@@ -6,10 +6,20 @@
     import { get } from "svelte/store";
     import { navigate } from "svelte-routing";
 
-    let newNote;
-    let newCredential;
-    let newDocument;
-    
+    let newNote = $state({});
+    let newCredential = $state({});
+    let newDocument = $state({});
+
+    let userId = $state("");
+    let userEmail = $state("");
+    let userCreationDate = $state("");
+    let userLastLogin = $state("");
+
+    let user2FA = $state(false);
+
+    let showProfileModal = $state(false);
+    let showProfile = $state(false);
+
     let plaintext;
 
     let vaults = $state([]);
@@ -22,17 +32,281 @@
     let data_encrypted = $state("");
     let selectedVaultId = $state(null); 
 
-    let username = "";
-    let password = "";
-    let url = "";
-    let note = "";
-    let doc = ""
-    let activeSecretType = $state("note"); // Track which form is active
+    let user;
+    let newEmail;
+
+    let username = $state("");
+    let password = $state("");
+    let url = $state("");
+    let note = $state("");
+    let doc = $state("")
+    let selectedFile = $state(null);
+    let fileName = $state("");
+    let fileSize = $state(0);
+    let fileType = $state("");
+    let activeSecretType = $state("credential"); // Track which form is active
+    let visiblePasswords = $state(new Set()); // Track which passwords are visible
+
+    async function updateEmail(){
+        
+        const response = await fetch(`${apiBase}/user/email`, {
+        method: "PATCH",
+        headers: {
+        'Content-Type': 'application/json',
+        'accept': "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        },
+        body: JSON.stringify({"email": newEmail})
+    });
+
+        if (!response.ok){
+            throw new Error("Error");
+        }
+
+        user = await response.json();
+
+        profile();
+
+        return user.email
+
+    }
 
     function logout() {
         localStorage.removeItem("access_token");
         userKey.set(null);
         navigate("/login");
+    }
+
+    async function profile(){
+        showProfile = true;
+
+        const response = await fetch(`${apiBase}/user/me`, {
+        method: "GET",
+        headers: {
+        'Content-Type': 'application/json',
+        'accept': "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        }});
+
+        if (!response.ok){
+            throw new Error("Error");
+        }
+
+        user = await response.json();
+
+        userId = user.id;
+        userEmail = user.email;
+        userCreationDate = user.created_at;
+        userLastLogin = user.last_login;
+        user2FA = user.mfa_enabled;
+
+
+    }
+
+    let mfaSetupData;
+    let showMFASetup = $state(false);
+    let otp_uri = $state("");
+    let qrcodeb64 = $state("");
+
+    async function mfaSetup(){
+        showMFASetup = true
+
+    const response = await fetch(`${apiBase}/2fa/setup`, {
+        method: "POST",
+        headers: {
+        'Content-Type': 'application/json',
+        'accept': "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        }});
+
+        if (!response.ok){
+            throw new Error("Error");
+        }
+
+        mfaSetupData = await response.json();
+
+        otp_uri = mfaSetupData.otp_uri
+        qrcodeb64 = mfaSetupData.qr_data_url
+
+
+    }
+    let mfaConfirm = $state("");
+    let mfaCode = $state("");
+
+    async function confirm2FA(){
+            
+
+    const response = await fetch(`${apiBase}/2fa/confirm`, {
+        method: "POST",
+        headers: {
+        'Content-Type': 'application/json',
+        'accept': "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        },
+        body: JSON.stringify({"code": mfaCode})
+
+    });
+
+        if (!response.ok){
+            throw new Error("Error");
+        }
+
+        mfaConfirm = await response.json();
+    
+
+        user2FA = true;
+        showMFASetup = false;
+
+        return mfaConfirm
+    }
+
+
+
+    
+
+    async function deleteMe(){
+        const response = await fetch(`${apiBase}/user`, {
+        method: "DELETE",
+        headers: {
+        'Content-Type': 'application/json',
+        'accept': "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        }});
+
+        if (!response.ok){
+            throw new Error("Error");
+        }
+
+        navigate("/");
+    }
+
+    async function secretsExport(){
+
+        const response = await fetch(`${apiBase}/secret`, {
+        method: "GET",
+        headers: {
+        'Content-Type': 'application/json',
+        'accept': "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        }});
+
+        if (!response.ok){
+            throw new Error("Error");
+        }
+
+        const secrets = await response.json();
+
+
+
+    }
+
+
+    function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (file) {
+            // File size limit: 10MB
+            const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+            if (file.size > maxSize) {
+                alert("File size must be less than 10MB");
+                event.target.value = "";
+                return;
+            }
+
+            // Allowed file types
+            const allowedTypes = [
+                'application/pdf',
+                'image/jpeg',
+                'image/png',
+                'image/gif',
+                'text/plain',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            ];
+
+            if (!allowedTypes.includes(file.type)) {
+                alert("File type not supported. Please upload PDF, images, or text documents.");
+                event.target.value = "";
+                return;
+            }
+
+            selectedFile = file;
+            fileName = file.name;
+            fileSize = file.size;
+            fileType = file.type;
+        }
+    }
+
+    async function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                // Remove the data URL prefix (data:*/*;base64,)
+                const result = reader.result;
+                if (typeof result === 'string') {
+                    const base64 = result.split(',')[1];
+                    resolve(base64);
+                } else {
+                    reject(new Error('Expected string result from FileReader'));
+                }
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function downloadFile(fileData) {
+        try {
+            // Convert base64 back to blob
+            const byteCharacters = atob(fileData.fileData);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: fileData.fileType });
+            
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = fileData.fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            alert('Error downloading file: ' + error.message);
+        }
+    }
+
+    async function copyToClipboard(text, fieldName) {
+        try {
+            await navigator.clipboard.writeText(text);
+            // Show temporary feedback
+            const originalFieldName = fieldName;
+            // You could add a toast notification here if desired
+            console.log(`${originalFieldName} copied to clipboard`);
+        } catch (error) {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            console.log(`${fieldName} copied to clipboard (fallback)`);
+        }
+    }
+
+    function togglePasswordVisibility(secretId) {
+        if (visiblePasswords.has(secretId)) {
+            visiblePasswords.delete(secretId);
+        } else {
+            visiblePasswords.add(secretId);
+        }
+        // Trigger reactivity
+        visiblePasswords = new Set(visiblePasswords);
     }
 
 
@@ -65,6 +339,12 @@ async function getVaults(){
         throw new Error("Network error");
     }
 
+    // Auto-select the first vault if no vault is currently selected and vaults exist
+    if (!selectedVaultId && vaults.length > 0) {
+        selectedVaultId = vaults[0].id;
+        getSecretsOfVault(vaults[0].id);
+    }
+
 }
 
 async function addVault(){
@@ -86,6 +366,10 @@ async function addVault(){
     vaults.push(newVault)
     vaultName = "";
 
+    // Auto-select the newly created vault
+    selectedVaultId = newVault.id;
+    getSecretsOfVault(newVault.id);
+
 }
 
 async function getSecretsOfVault(vaultId){
@@ -103,6 +387,7 @@ async function getSecretsOfVault(vaultId){
     }
     const encryptedSecrets = await response.json(); 
     selectedVaultId = vaultId;
+    showProfile = false; // Hide profile when vault is selected
 
 
 
@@ -147,6 +432,7 @@ async function getSecretsOfVault(vaultId){
         } catch (err) {
             
             console.error("Decrypt failed for secret:", err);
+            localStorage.removeItem("access_token");
             navigate("/login");
             return { ...secret, data: null };
 
@@ -158,20 +444,58 @@ async function getSecretsOfVault(vaultId){
 
 
 async function addSecret(secret_type){
+    console.log("addSecret called with:", secret_type);
+    
+    // Add a simple check to prevent infinite recursion
+    if (addSecret._running) {
+        console.warn("addSecret already running, preventing recursion");
+        return;
+    }
+    addSecret._running = true;
 
-   newCredential = {
-    username: username,
-    password: password,
-    url: url,
-    note: note
-   }
-   newNote = {
-    content: note
-   }
-   newDocument = {
-    file: doc
+    try {
+        newCredential = {
+            title: title,
+            username: username,
+            password: password,
+            url: url,
+            note: note
+        }
+        newNote = {
+            title: title,
+            content: note
+        }
 
-   }
+        if (secret_type === "document") {
+            if (!selectedFile) {
+                alert("Please select a file to upload");
+                return;
+            }
+            
+            // Add file size limit (5MB)
+            if (selectedFile.size > 5 * 1024 * 1024) {
+                alert("File too large. Maximum size is 5MB.");
+                return;
+            }
+            
+            try {
+                const fileBase64 = await fileToBase64(selectedFile);
+                newDocument = {
+                    title: title,
+                    fileName: fileName,
+                    fileType: fileType,
+                    fileSize: fileSize,
+                    fileData: fileBase64
+                };
+            } catch (error) {
+                alert("Error reading file: " + error.message);
+                return;
+            }
+        } else {
+            newDocument = {
+                file: doc
+            };
+        }
 
    const secretKeyBytes = crypto.getRandomValues(new Uint8Array(32));
    const secretKey = await crypto.subtle.importKey(
@@ -203,7 +527,8 @@ async function addSecret(secret_type){
 
             const userKeyValue = get(userKey);
         if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
-            throw new Error("User key is not properly initialized as a CryptoKey");
+            localStorage.removeItem("access_token");
+            navigate("/login")
         }
 
     const secretKeyIv = crypto.getRandomValues(new Uint8Array(12));
@@ -214,10 +539,20 @@ async function addSecret(secret_type){
     secretKeyBytes
     )
 
-    const encryptedSecretB64 = btoa(String.fromCharCode(...new Uint8Array(encryptedSecret)));
-    const secretIvB64 = btoa(String.fromCharCode(...secretIv));
-    const encryptedSecretKeyB64 = btoa(String.fromCharCode(...new Uint8Array(encryptedSecretKey)));
-    const secretKeyIvB64 = btoa(String.fromCharCode(...secretKeyIv));
+    // Use a safer approach for large data to avoid stack overflow
+    function arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    const encryptedSecretB64 = arrayBufferToBase64(encryptedSecret);
+    const secretIvB64 = arrayBufferToBase64(secretIv);
+    const encryptedSecretKeyB64 = arrayBufferToBase64(encryptedSecretKey);
+    const secretKeyIvB64 = arrayBufferToBase64(secretKeyIv);
 
 
 
@@ -229,7 +564,6 @@ async function addSecret(secret_type){
         "Authorization": `Bearer ${localStorage.getItem("access_token")}`
         },
         body: JSON.stringify({            
-            title,
             data_encrypted: encryptedSecretB64,
             secret_iv: secretIvB64,
             encrypted_secret_key: encryptedSecretKeyB64,
@@ -252,20 +586,31 @@ async function addSecret(secret_type){
             
 
     // Clear form fields based on secret type
-    title = "";
-    if (secret_type === "note") {
+title = "";
         note = "";
-    } else if (secret_type === "credential") {
+
         username = "";
         password = "";
         url = "";
         note = "";
-    } else if (secret_type === "document") {
+
         doc = "";
+        selectedFile = null;
+        fileName = "";
+        fileSize = 0;
+        fileType = "";
+
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput instanceof HTMLInputElement) fileInput.value = "";
+    
+        title = "";
+    
+    } catch (error) {
+        console.error("Error in addSecret:", error);
+        alert("Error adding secret: " + error.message);
+    } finally {
+        addSecret._running = false;
     }
-    title = "";
-            
- 
 }
 
 
@@ -282,6 +627,10 @@ async function addSecret(secret_type){
                 <span class="text">Password123</span>
                 <span class="brackets">]</span>
             </h1>
+            <button class="profile-btn" class:active={showProfile} onclick={profile}>
+                <span>profile</span>
+                <span class="profile-icon">⏻</span>
+            </button>
             <button class="logout-btn" onclick={logout}>
                 <span>logout</span>
                 <span class="logout-icon">⏻</span>
@@ -313,22 +662,288 @@ async function addSecret(secret_type){
             </div>
 
             <div class="add-vault-section">
-                <div class="input-group">
-                    <input 
-                        class="vault-input" 
-                        placeholder="vault_name" 
-                        bind:value={vaultName} 
-                    />
-                    <button class="add-vault-btn" onclick={addVault}>
-                        <span>CREATE</span>
-                    </button>
-                </div>
+                <input 
+                    class="vault-input" 
+                    placeholder="vault_name" 
+                    bind:value={vaultName} 
+                />
+                <button class="add-vault-btn" onclick={addVault}>
+                    <span>CREATE</span>
+                </button>
             </div>
+
+            <!-- Add Secret Section -->
+            <div class="add-secret-sidebar">
+                <div class="sidebar-header">
+                    <h3 class="sidebar-title">// ADD SECRET</h3>
+                </div>
+                    
+                    <!-- Secret Type Dropdown -->
+                    <div class="sidebar-dropdown-section">
+                        <label class="dropdown-label">secret_type:</label>
+                        <select 
+                            class="sidebar-dropdown"
+                            bind:value={activeSecretType}
+                        >
+                            <option value="credential">🔑 CREDENTIAL</option>
+                            <option value="note">📝 NOTE</option>
+                            <option value="document">📄 DOCUMENT</option>
+                        </select>
+                    </div>
+
+                    <!-- Forms -->
+                    <div class="sidebar-form">
+                        {#if activeSecretType === "credential"}
+                            <input 
+                                placeholder="secret_title" 
+                                class="sidebar-input" 
+                                bind:value={title} 
+                            />
+                            <input 
+                                placeholder="username" 
+                                class="sidebar-input" 
+                                bind:value={username} 
+                            />
+                            <input 
+                                placeholder="password" 
+                                type="password"
+                                class="sidebar-input" 
+                                bind:value={password} 
+                            />
+                            <input 
+                                placeholder="website_url (optional)" 
+                                class="sidebar-input" 
+                                bind:value={url} 
+                            />
+                            <textarea 
+                                placeholder="additional_notes (optional)" 
+                                class="sidebar-textarea" 
+                                bind:value={note}
+                                rows="2"
+                            ></textarea>
+                            <button 
+                                class="sidebar-add-btn" 
+                                class:disabled={!selectedVaultId}
+                                disabled={!selectedVaultId}
+                                onclick={() => selectedVaultId && addSecret("credential")}
+                            >>
+                                <span>ENCRYPT & STORE</span>
+                                <span class="btn-icon">🔐</span>
+                            </button>
+                        {:else if activeSecretType === "note"}
+                            <input 
+                                placeholder="secret_title" 
+                                class="sidebar-input" 
+                                bind:value={title} 
+                            />
+                            <textarea 
+                                placeholder="note_content" 
+                                class="sidebar-textarea" 
+                                bind:value={note}
+                                rows="3"
+                            ></textarea>
+                            <button 
+                                class="sidebar-add-btn" 
+                                class:disabled={!selectedVaultId}
+                                disabled={!selectedVaultId}
+                                onclick={() => selectedVaultId && addSecret("note")}
+                            >>
+                                <span>ENCRYPT & STORE</span>
+                                <span class="btn-icon">🔐</span>
+                            </button>
+                        {:else if activeSecretType === "document"}
+                            <input 
+                                placeholder="document_title" 
+                                class="sidebar-input" 
+                                bind:value={title} 
+                            />
+                            <label class="sidebar-file-upload">
+                                <input 
+                                    type="file" 
+                                    class="file-input"
+                                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
+                                    onchange={handleFileUpload}
+                                />
+                                <span class="file-upload-text">
+                                    {#if selectedFile}
+                                        📄 {fileName}
+                                    {:else}
+                                        📎 Upload file
+                                    {/if}
+                                </span>
+                            </label>
+                            {#if selectedFile}
+                                <div class="sidebar-file-info">
+                                    <span class="file-detail">Size: {(fileSize / 1024).toFixed(1)} KB</span>
+                                </div>
+                            {/if}
+                            <textarea 
+                                placeholder="description (optional)" 
+                                class="sidebar-textarea" 
+                                bind:value={doc}
+                                rows="2"
+                            ></textarea>
+                            <button 
+                                class="sidebar-add-btn" 
+                                class:disabled={!selectedVaultId}
+                                disabled={!selectedVaultId}
+                                onclick={() => selectedVaultId && addSecret("document")}
+                            >
+                                <span>ENCRYPT & STORE</span>
+                                <span class="btn-icon">🔐</span>
+                            </button>
+                        {/if}
+                    </div>
+                </div>
         </aside>
 
         <!-- Secrets Content -->
         <section class="secrets-content">
-            {#if selectedVaultId}
+            {#if showProfile}
+                <!-- Profile Content -->
+                <div class="profile-content">
+                    <div class="profile-header">
+                        <h2 class="section-title">// USER PROFILE SETTINGS</h2>
+                        <div class="profile-status">
+                            <span class="status-indicator">●</span>
+                            <span>PROFILE ACTIVE</span>
+                        </div>
+                    </div>
+
+                    <div class="profile-sections">
+                        <div class="profile-section">
+                            <h3 class="section-header">$ account_info --current</h3>
+                            <div class="info-grid">
+                                <div class="info-item">
+                                    <span class="info-label">user_id:</span>
+                                    <span class="info-value">{userId}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">email:</span>
+                                    <span class="info-value">{userEmail}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">created:</span>
+                                    <span class="info-value">{userCreationDate}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">last_login:</span>
+                                    <span class="info-value">{userLastLogin}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">2 Factor Authentication</span>
+                                    <span class="info-value">{String(user2FA)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {#if !user2FA}
+                        <div class="profile-section">
+                            <h3 class="section-header">$ enable_2fa --security</h3>
+                            <div class="security-info">
+                                <div class="security-description">
+                                    <span class="security-icon">🔐</span>
+                                    <div class="security-text">
+                                        <h4>Two-Factor Authentication</h4>
+                                        <p>Add an extra layer of security to your account with TOTP-based 2FA</p>
+                                    </div>
+                                </div>
+                                <button class="profile-action-btn primary" onclick={mfaSetup}>
+                                    <span>ENABLE 2FA</span>
+                                    <span class="btn-icon">🛡️</span>
+                                </button>
+                            </div>
+                        </div>
+                        {/if}
+
+                        <div class="profile-section">
+                            <h3 class="section-header">$ update_email --new</h3>
+                            <div class="form-group">
+                                <label class="form-label">current_email:</label>
+                                <input 
+                                    type="email" 
+                                    class="profile-input" 
+                                    value="user@example.com" 
+                                    disabled
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">new_email:</label>
+                                <input 
+                                    type="email" 
+                                    class="profile-input" 
+                                    placeholder="new.email@domain.com"
+                                    bind:value={newEmail}
+                                />
+                            </div>
+                
+                            <button class="profile-action-btn primary" onclick={updateEmail}>
+                                <span>UPDATE EMAIL</span>
+                                <span class="btn-icon">📧</span>
+                            </button>
+                        </div>
+
+                        <div class="profile-section">
+                            <h3 class="section-header">$ change_password --master</h3>
+                
+                            <div class="form-group">
+                                <label class="form-label">current_password:</label>
+                                <input 
+                                    type="password" 
+                                    class="profile-input" 
+                                    placeholder="enter current master password"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">new_password:</label>
+                                <input 
+                                    type="password" 
+                                    class="profile-input" 
+                                    placeholder="enter new master password"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">confirm_password:</label>
+                                <input 
+                                    type="password" 
+                                    class="profile-input" 
+                                    placeholder="confirm new master password"
+                                />
+                            </div>
+                            <button class="profile-action-btn danger">
+                                <span>CHANGE PASSWORD</span>
+                                <span class="btn-icon">🔐</span>
+                            </button>
+                        </div>
+
+                        <div class="profile-section">
+                            <h3 class="section-header">$ security_actions --danger</h3>
+                            <div class="danger-zone">
+                                <div class="danger-item">
+                                    <div class="danger-info">
+                                        <h4>Export Encrypted Data</h4>
+                                        <p>Download all your encrypted vault data for backup purposes</p>
+                                    </div>
+                                    <button class="profile-action-btn secondary">
+                                        <span>EXPORT DATA</span>
+                                        <span class="btn-icon">📤</span>
+                                    </button>
+                                </div>
+                                <div class="danger-item">
+                                    <div class="danger-info">
+                                        <h4>Delete Account</h4>
+                                        <p>Permanently delete your account and all associated data</p>
+                                    </div>
+                                    <button class="profile-action-btn danger" onclick={deleteMe}>
+                                        <span>DELETE ACCOUNT</span>
+                                        <span class="btn-icon">🗑️</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {:else if selectedVaultId}
                 <div class="secrets-header">
                     <h2 class="section-title">// ENCRYPTED SECRETS</h2>
                     <div class="vault-status">
@@ -337,144 +952,19 @@ async function addSecret(secret_type){
                     </div>
                 </div>
 
-                <!-- Add Secret Form -->
-                <div class="add-secret-form">
-                    <!-- Secret Type Tabs -->
-                    <div class="secret-type-tabs">
-                        <button 
-                            class="tab-btn"
-                            class:active={activeSecretType === "note"}
-                            onclick={() => activeSecretType = "note"}
-                        >
-                            <span class="tab-icon">📝</span>
-                            <span>NOTE</span>
-                        </button>
-                        <button 
-                            class="tab-btn"
-                            class:active={activeSecretType === "credential"}
-                            onclick={() => activeSecretType = "credential"}
-                        >
-                            <span class="tab-icon">🔑</span>
-                            <span>CREDENTIAL</span>
-                        </button>
-                        <button 
-                            class="tab-btn"
-                            class:active={activeSecretType === "document"}
-                            onclick={() => activeSecretType = "document"}
-                        >
-                            <span class="tab-icon">📄</span>
-                            <span>DOCUMENT</span>
-                        </button>
-                    </div>
-
-                    <!-- Dynamic Form Title -->
-                    <h3 class="form-title">$ new_secret --type={activeSecretType}</h3>
-
-                    <!-- Note Form -->
-                    {#if activeSecretType === "note"}
-                        <div class="form-grid note-form">
-                            <input 
-                                placeholder="secret_title" 
-                                class="secret-input" 
-                                bind:value={title} 
-                            />
-                            <textarea 
-                                placeholder="note_content" 
-                                class="secret-textarea" 
-                                bind:value={note}
-                                rows="4"
-                            ></textarea>
-                            <button class="add-secret-btn" onclick={() => addSecret("note")}>
-                                <span>ENCRYPT & STORE</span>
-                                <span class="btn-icon">🔐</span>
-                            </button>
-                        </div>
-                    {/if}
-
-                    <!-- Credential Form -->
-                    {#if activeSecretType === "credential"}
-                        <div class="credential-form">
-                            <div class="form-row">
-                                <input 
-                                    placeholder="secret_title" 
-                                    class="secret-input" 
-                                    bind:value={title} 
-                                />
-                            </div>
-                            <div class="form-row">
-                                <input 
-                                    placeholder="username" 
-                                    class="secret-input" 
-                                    bind:value={username} 
-                                />
-                                <input 
-                                    placeholder="password" 
-                                    type="password"
-                                    class="secret-input" 
-                                    bind:value={password} 
-                                />
-                            </div>
-                            <div class="form-row">
-                                <input 
-                                    placeholder="website_url (optional)" 
-                                    class="secret-input" 
-                                    bind:value={url} 
-                                />
-                            </div>
-                            <div class="form-row">
-                                <textarea 
-                                    placeholder="additional_notes (optional)" 
-                                    class="secret-textarea" 
-                                    bind:value={note}
-                                    rows="2"
-                                ></textarea>
-                            </div>
-                            <button class="add-secret-btn" onclick={() => addSecret("credential")}>
-                                <span>ENCRYPT & STORE</span>
-                                <span class="btn-icon">🔐</span>
-                            </button>
-                        </div>
-                    {/if}
-
-                    <!-- Document Form -->
-                    {#if activeSecretType === "document"}
-                        <div class="document-form">
-                            <div class="form-row">
-                                <input 
-                                    placeholder="document_title" 
-                                    class="secret-input" 
-                                    bind:value={title} 
-                                />
-                            </div>
-                            <div class="form-row">
-                                <textarea 
-                                    placeholder="document_content_or_description" 
-                                    class="secret-textarea" 
-                                    bind:value={doc}
-                                    rows="4"
-                                ></textarea>
-                            </div>
-                            <button class="add-secret-btn" onclick={() => addSecret("document")}>
-                                <span>ENCRYPT & STORE</span>
-                                <span class="btn-icon">🔐</span>
-                            </button>
-                        </div>
-                    {/if}
-                </div>
-
                 <!-- Secrets List -->
                 <div class="secrets-list">
                     {#each secrets as secret}
                         <div class="secret-card">
                             <div class="secret-header">
-                                <h4 class="secret-title">{secret.title}</h4>
+                                <h4 class="secret-title">{secret.data?.title}</h4>
                                 <div class="secret-meta">
                                     <span class="secret-type">
                                         {#if secret.data?.content}
                                             NOTE
                                         {:else if secret.data?.username}
                                             CREDENTIAL
-                                        {:else if secret.data?.file}
+                                        {:else if secret.data?.fileName || secret.data?.file}
                                             DOCUMENT
                                         {:else}
                                             DATA
@@ -492,18 +982,40 @@ async function addSecret(secret_type){
                                             <span class="field-value">{secret.data.content}</span>
                                         </div>
                                     {:else if secret.data.username}
-                                        <div class="field">
+                                        <div class="field credential-field">
                                             <span class="field-label">username:</span>
-                                            <span class="field-value">{secret.data.username}</span>
+                                            <div class="field-value-with-actions">
+                                                <span class="field-value">{secret.data.username}</span>
+                                                <button class="copy-btn" onclick={() => copyToClipboard(secret.data.username, 'Username')}>
+                                                    <span>📋</span>
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div class="field">
+                                        <div class="field credential-field">
                                             <span class="field-label">password:</span>
-                                            <span class="field-value password">{"•".repeat(secret.data.password.length)}</span>
+                                            <div class="field-value-with-actions">
+                                                <span class="field-value password">
+                                                    {visiblePasswords.has(secret.id) ? secret.data.password : "•".repeat(secret.data.password.length)}
+                                                </span>
+                                                <div class="password-actions">
+                                                    <button class="toggle-btn" onclick={() => togglePasswordVisibility(secret.id)}>
+                                                        <span>{visiblePasswords.has(secret.id) ? '🙈' : '👁️'}</span>
+                                                    </button>
+                                                    <button class="copy-btn" onclick={() => copyToClipboard(secret.data.password, 'Password')}>
+                                                        <span>📋</span>
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                         {#if secret.data.url}
-                                            <div class="field">
+                                            <div class="field credential-field">
                                                 <span class="field-label">url:</span>
-                                                <span class="field-value">{secret.data.url}</span>
+                                                <div class="field-value-with-actions">
+                                                    <span class="field-value">{secret.data.url}</span>
+                                                    <button class="copy-btn" onclick={() => copyToClipboard(secret.data.url, 'URL')}>
+                                                        <span>📋</span>
+                                                    </button>
+                                                </div>
                                             </div>
                                         {/if}
                                         {#if secret.data.note}
@@ -512,9 +1024,32 @@ async function addSecret(secret_type){
                                                 <span class="field-value">{secret.data.note}</span>
                                             </div>
                                         {/if}
-                                    {:else if secret.data.file}
+                                    {:else if secret.data.fileName}
+                                        <!-- New file upload format -->
                                         <div class="field">
                                             <span class="field-label">file:</span>
+                                            <span class="field-value file-name">{secret.data.fileName}</span>
+                                        </div>
+                                        <div class="field">
+                                            <span class="field-label">type:</span>
+                                            <span class="field-value">{secret.data.fileType}</span>
+                                        </div>
+                                        <div class="field">
+                                            <span class="field-label">size:</span>
+                                            <span class="field-value">{(secret.data.fileSize / 1024).toFixed(1)} KB</span>
+                                        </div>
+                                        <div class="field file-actions">
+                                            <span class="field-label">actions:</span>
+                                            <div class="action-buttons">
+                                                <button class="action-btn download-btn" onclick={() => downloadFile(secret.data)}>
+                                                    <span>📥 Download</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    {:else if secret.data.file}
+                                        <!-- Legacy text format -->
+                                        <div class="field">
+                                            <span class="field-label">content:</span>
                                             <span class="field-value">{secret.data.file}</span>
                                         </div>
                                     {:else}
@@ -534,12 +1069,123 @@ async function addSecret(secret_type){
                 <div class="empty-state">
                     <div class="empty-icon">🔒</div>
                     <h3>SELECT A VAULT</h3>
-                    <p>Choose a vault from the sidebar to decrypt and view your secrets</p>
+                    <p>Choose a vault from the sidebar to decrypt and view your secrets, or use the profile button to manage your account</p>
                 </div>
             {/if}
         </section>
     </main>
+
+    <!-- MFA Setup Modal -->
+    {#if showMFASetup}
+        <div class="modal-overlay" onclick={() => showMFASetup = false}>
+            <div class="modal-container mfa-modal" onclick={(e) => e.stopPropagation()}>
+                <div class="modal-header">
+                    <h2 class="modal-title">
+                        <span class="modal-icon">🔐</span>
+                        <span>Two-Factor Authentication Setup</span>
+                    </h2>
+                    <button class="modal-close" onclick={() => showMFASetup = false}>
+                        ×
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="mfa-setup-content">
+                        <!-- Instructions Section -->
+                        <div class="mfa-instructions">
+                            <h3 class="instruction-title">$ setup_2fa --instructions</h3>
+                            <div class="instruction-steps">
+                                <div class="step">
+                                    <span class="step-number">1.</span>
+                                    <div class="step-content">
+                                        <h4>Install Authenticator App</h4>
+                                        <p>Download an authenticator app such as:</p>
+                                        <ul>
+                                            <li>Google Authenticator</li>
+                                            <li>Authy</li>
+                                            <li>Microsoft Authenticator</li>
+                                            <li>1Password</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <div class="step">
+                                    <span class="step-number">2.</span>
+                                    <div class="step-content">
+                                        <h4>Scan QR Code</h4>
+                                        <p>Open your authenticator app and scan the QR code shown on the right, or manually enter the secret key below.</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="step">
+                                    <span class="step-number">3.</span>
+                                    <div class="step-content">
+                                        <h4>Verify Setup</h4>
+                                        <p>Enter the 6-digit code from your authenticator app to complete the setup.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="security-note">
+                                <span class="warning-icon">⚠️</span>
+                                <div class="note-content">
+                                    <strong>Important:</strong> Save your secret key in a secure location. If you lose access to your authenticator app, you'll need this key to recover your account.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- QR Code Section -->
+                        <div class="mfa-qr-section">
+                            <div class="qr-container">
+                                <h3 class="qr-title">$ scan_qr_code</h3>
+                                {#if qrcodeb64}
+                                    <div class="qr-code-wrapper">
+                                        <img src={qrcodeb64} alt="2FA QR Code" class="qr-code" />
+                                    </div>
+                                {:else}
+                                    <div class="qr-loading">
+                                        <span>Generating QR Code...</span>
+                                    </div>
+                                {/if}
+                                
+                                <div class="manual-entry">
+                                    <h4>Manual Entry</h4>
+                                    <div class="secret-key-container">
+                                        <label class="secret-label">Secret Key:</label>
+                                        <div class="secret-value-container">
+                                            <code class="secret-key">{otp_uri}</code>
+                                            <button class="copy-btn" onclick={() => copyToClipboard(otp_uri, 'Secret Key')}>
+                                                <span>📋</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="verification-section">
+                                <h4>Verify Setup</h4>
+                                <div class="verification-form">
+                                    <input 
+                                        type="text" 
+                                        class="verification-input" 
+                                        placeholder="Enter 6-digit code"
+                                        maxlength="6"
+                                        bind:value={mfaCode}
+                                    />
+                                    <button class="verify-btn" onclick={confirm2FA}>
+                                        <span>VERIFY & ENABLE</span>
+                                        <span class="btn-icon">✓</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {/if}
 </div>
+
 
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
@@ -613,6 +1259,36 @@ async function addSecret(secret_type){
     .logout-btn:hover {
         background: rgba(255, 107, 107, 0.2);
         transform: translateY(-1px);
+    }
+
+    .profile-btn {
+        background: rgba(0, 170, 255, 0.1);
+        border: 1px solid #00aaff;
+        color: #00aaff;
+        padding: 8px 15px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .profile-btn:hover {
+        background: rgba(0, 170, 255, 0.2);
+        transform: translateY(-1px);
+    }
+
+    .profile-btn.active {
+        background: rgba(0, 170, 255, 0.3);
+        border-color: #00aaff;
+        box-shadow: 0 0 15px rgba(0, 170, 255, 0.4);
+    }
+
+    .profile-icon {
+        font-size: 1rem;
     }
 
     /* Main Content */
@@ -711,15 +1387,13 @@ async function addSecret(secret_type){
     .add-vault-section {
         border-top: 1px solid #333;
         padding-top: 20px;
-    }
-
-    .input-group {
         display: flex;
-        gap: 10px;
+        flex-direction: column;
+        gap: 12px;
     }
 
     .vault-input {
-        flex: 1;
+        width: 100%;
         background: rgba(0, 0, 0, 0.6);
         border: 1px solid #333;
         color: #00ff41;
@@ -727,6 +1401,7 @@ async function addSecret(secret_type){
         border-radius: 5px;
         font-family: 'JetBrains Mono', monospace;
         font-size: 0.9rem;
+        box-sizing: border-box;
     }
 
     .vault-input:focus {
@@ -736,6 +1411,7 @@ async function addSecret(secret_type){
     }
 
     .add-vault-btn {
+        width: 100%;
         background: linear-gradient(45deg, #00ff41, #00cc33);
         border: none;
         color: #000;
@@ -746,6 +1422,7 @@ async function addSecret(secret_type){
         font-weight: 700;
         cursor: pointer;
         transition: all 0.3s ease;
+        box-sizing: border-box;
     }
 
     .add-vault-btn:hover {
@@ -915,6 +1592,167 @@ async function addSecret(secret_type){
         box-shadow: 0 5px 15px rgba(0, 170, 255, 0.4);
     }
 
+    /* File Upload Styles */
+    .file-upload-section {
+        display: grid;
+        gap: 10px;
+    }
+
+    .file-upload-label {
+        display: block;
+        background: rgba(0, 0, 0, 0.8);
+        border: 2px dashed #333;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .file-upload-label:hover {
+        border-color: #00aaff;
+        background: rgba(0, 170, 255, 0.05);
+        transform: translateY(-1px);
+    }
+
+    .file-input {
+        display: none;
+    }
+
+    .file-upload-text {
+        color: #00aaff;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .file-info {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 12px;
+        background: rgba(0, 170, 255, 0.1);
+        border: 1px solid #00aaff;
+        border-radius: 5px;
+        font-size: 0.8rem;
+    }
+
+    .file-detail {
+        color: #00aaff;
+    }
+
+    .file-name {
+        color: #00aaff !important;
+        font-weight: 500;
+    }
+
+    .file-actions {
+        align-items: flex-start;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+    }
+
+    .action-btn {
+        background: rgba(0, 255, 65, 0.1);
+        border: 1px solid #00ff41;
+        color: #00ff41;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .action-btn:hover {
+        background: rgba(0, 255, 65, 0.2);
+        transform: translateY(-1px);
+    }
+
+    .download-btn:hover {
+        box-shadow: 0 3px 10px rgba(0, 255, 65, 0.3);
+    }
+
+    /* Credential Field Actions */
+    .credential-field {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: 15px;
+        align-items: center;
+    }
+
+    .field-value-with-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        justify-content: space-between;
+    }
+
+    .password-actions {
+        display: flex;
+        gap: 5px;
+    }
+
+    .copy-btn, .toggle-btn {
+        background: rgba(0, 170, 255, 0.1);
+        border: 1px solid #00aaff;
+        color: #00aaff;
+        padding: 4px 8px;
+        border-radius: 3px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 30px;
+        height: 28px;
+    }
+
+    .copy-btn:hover, .toggle-btn:hover {
+        background: rgba(0, 170, 255, 0.2);
+        transform: scale(1.05);
+        box-shadow: 0 2px 8px rgba(0, 170, 255, 0.3);
+    }
+
+    .toggle-btn {
+        background: rgba(255, 193, 7, 0.1);
+        border-color: #ffc107;
+        color: #ffc107;
+    }
+
+    .toggle-btn:hover {
+        background: rgba(255, 193, 7, 0.2);
+        box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+    }
+
+    .copy-btn:active, .toggle-btn:active {
+        transform: scale(0.95);
+    }
+
+    /* Responsive adjustments for credential fields */
+    @media (max-width: 768px) {
+        .credential-field {
+            grid-template-columns: 1fr;
+            gap: 5px;
+        }
+
+        .field-value-with-actions {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .password-actions {
+            align-self: flex-end;
+        }
+    }
+
     /* Secrets List */
     .secrets-list {
         display: grid;
@@ -1055,6 +1893,603 @@ async function addSecret(secret_type){
         line-height: 1.5;
     }
 
+    /* Profile Content Styles */
+    .profile-content {
+        width: 100%;
+    }
+
+    .profile-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+
+    .profile-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #00aaff;
+        font-size: 0.9rem;
+    }
+
+    .profile-sections {
+        display: grid;
+        gap: 30px;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    /* Profile Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(5px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    .modal-container {
+        background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+        border: 2px solid #00ff41;
+        border-radius: 10px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 255, 65, 0.3);
+        animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+        from { 
+            transform: translateY(-50px);
+            opacity: 0;
+        }
+        to { 
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 25px;
+        border-bottom: 1px solid #333;
+        background: rgba(0, 0, 0, 0.6);
+    }
+
+    .modal-title {
+        margin: 0;
+        font-size: 1.2rem;
+        color: #00ff41;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+    }
+
+    .modal-icon {
+        font-size: 1.3rem;
+    }
+
+    .modal-close {
+        background: rgba(255, 107, 107, 0.1);
+        border: 1px solid #ff6b6b;
+        color: #ff6b6b;
+        width: 35px;
+        height: 35px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+
+    .modal-close:hover {
+        background: rgba(255, 107, 107, 0.2);
+        transform: scale(1.1);
+        box-shadow: 0 0 15px rgba(255, 107, 107, 0.4);
+    }
+
+    .modal-body {
+        padding: 25px;
+        display: grid;
+        gap: 30px;
+    }
+
+    /* MFA Setup Modal Styles */
+    .mfa-modal {
+        max-width: 900px;
+        width: 95%;
+    }
+
+    .mfa-setup-content {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        align-items: start;
+    }
+
+    .mfa-instructions {
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid #333;
+        border-radius: 8px;
+        padding: 20px;
+    }
+
+    .instruction-title {
+        color: #00aaff;
+        font-size: 1rem;
+        margin: 0 0 20px 0;
+        font-weight: 500;
+    }
+
+    .instruction-steps {
+        display: grid;
+        gap: 20px;
+        margin-bottom: 25px;
+    }
+
+    .step {
+        display: flex;
+        gap: 15px;
+        align-items: flex-start;
+    }
+
+    .step-number {
+        background: linear-gradient(45deg, #00aaff, #0088cc);
+        color: #000;
+        width: 25px;
+        height: 25px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .step-content h4 {
+        color: #00ff41;
+        font-size: 0.9rem;
+        margin: 0 0 8px 0;
+        font-weight: 600;
+    }
+
+    .step-content p {
+        color: #888;
+        font-size: 0.8rem;
+        margin: 0 0 8px 0;
+        line-height: 1.4;
+    }
+
+    .step-content ul {
+        margin: 0;
+        padding-left: 15px;
+        color: #888;
+        font-size: 0.8rem;
+    }
+
+    .step-content li {
+        margin-bottom: 3px;
+    }
+
+    .security-note {
+        background: rgba(255, 193, 7, 0.1);
+        border: 1px solid #ffc107;
+        border-radius: 5px;
+        padding: 15px;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+    }
+
+    .security-note .warning-icon {
+        color: #ffc107;
+        font-size: 1.2rem;
+        flex-shrink: 0;
+    }
+
+    .note-content {
+        color: #ffc107;
+        font-size: 0.8rem;
+        line-height: 1.4;
+    }
+
+    .note-content strong {
+        color: #ffc107;
+        font-weight: 700;
+    }
+
+    .mfa-qr-section {
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid #333;
+        border-radius: 8px;
+        padding: 20px;
+        display: grid;
+        gap: 20px;
+    }
+
+    .qr-title {
+        color: #00aaff;
+        font-size: 1rem;
+        margin: 0;
+        font-weight: 500;
+        text-align: center;
+    }
+
+    .qr-code-wrapper {
+        display: flex;
+        justify-content: center;
+        padding: 20px;
+        background: #fff;
+        border-radius: 8px;
+        margin: 0 auto;
+        width: fit-content;
+    }
+
+    .qr-code {
+        width: 200px;
+        height: 200px;
+        border-radius: 5px;
+    }
+
+    .qr-loading {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 240px;
+        background: rgba(0, 0, 0, 0.6);
+        border: 2px dashed #333;
+        border-radius: 8px;
+        color: #888;
+        font-size: 0.9rem;
+    }
+
+    .manual-entry {
+        border-top: 1px solid #333;
+        padding-top: 20px;
+    }
+
+    .manual-entry h4 {
+        color: #00ff41;
+        font-size: 0.9rem;
+        margin: 0 0 15px 0;
+        font-weight: 600;
+    }
+
+    .secret-key-container {
+        display: grid;
+        gap: 8px;
+    }
+
+    .secret-label {
+        color: #888;
+        font-size: 0.8rem;
+        text-transform: lowercase;
+    }
+
+    .secret-value-container {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .secret-key {
+        flex: 1;
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid #333;
+        color: #00ff41;
+        padding: 10px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        word-break: break-all;
+        overflow-wrap: break-word;
+    }
+
+    .verification-section {
+        border-top: 1px solid #333;
+        padding-top: 20px;
+    }
+
+    .verification-section h4 {
+        color: #00ff41;
+        font-size: 0.9rem;
+        margin: 0 0 15px 0;
+        font-weight: 600;
+    }
+
+    .verification-form {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .verification-input {
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid #333;
+        color: #00ff41;
+        padding: 12px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 1rem;
+        text-align: center;
+        letter-spacing: 3px;
+        width: 120px;
+    }
+
+    .verification-input:focus {
+        outline: none;
+        border-color: #00aaff;
+        box-shadow: 0 0 10px rgba(0, 170, 255, 0.3);
+    }
+
+    .verify-btn {
+        background: linear-gradient(45deg, #00ff41, #00cc33);
+        border: none;
+        color: #000;
+        padding: 12px 20px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .verify-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 255, 65, 0.4);
+    }
+
+    .profile-section {
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid #333;
+        border-radius: 8px;
+        padding: 20px;
+    }
+
+    .section-header {
+        color: #00aaff;
+        font-size: 1rem;
+        margin: 0 0 20px 0;
+        font-weight: 500;
+        text-transform: lowercase;
+    }
+
+    .info-grid {
+        display: grid;
+        gap: 12px;
+    }
+
+    .info-item {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 15px;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(51, 51, 51, 0.5);
+    }
+
+    .info-item:last-child {
+        border-bottom: none;
+    }
+
+    .info-label {
+        color: #888;
+        font-size: 0.9rem;
+        text-transform: lowercase;
+    }
+
+    .info-value {
+        color: #00ff41;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-label {
+        display: block;
+        color: #888;
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+        text-transform: lowercase;
+    }
+
+    .profile-input {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid #333;
+        color: #00ff41;
+        padding: 12px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        box-sizing: border-box;
+        transition: all 0.3s ease;
+    }
+
+    .profile-input:focus {
+        outline: none;
+        border-color: #00aaff;
+        box-shadow: 0 0 10px rgba(0, 170, 255, 0.3);
+    }
+
+    .profile-input:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        color: #666;
+    }
+
+    .profile-action-btn {
+        background: linear-gradient(45deg, #00aaff, #0088cc);
+        border: none;
+        color: #000;
+        padding: 12px 20px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .profile-action-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 170, 255, 0.4);
+    }
+
+    .profile-action-btn.primary {
+        background: linear-gradient(45deg, #00ff41, #00cc33);
+    }
+
+    .profile-action-btn.primary:hover {
+        box-shadow: 0 5px 15px rgba(0, 255, 65, 0.4);
+    }
+
+    .profile-action-btn.secondary {
+        background: linear-gradient(45deg, #ffc107, #ff9800);
+        color: #000;
+    }
+
+    .profile-action-btn.secondary:hover {
+        box-shadow: 0 5px 15px rgba(255, 193, 7, 0.4);
+    }
+
+    .profile-action-btn.danger {
+        background: linear-gradient(45deg, #ff6b6b, #ff5252);
+        color: #fff;
+    }
+
+    .profile-action-btn.danger:hover {
+        box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+    }
+
+    .security-warning {
+        background: rgba(255, 193, 7, 0.1);
+        border: 1px solid #ffc107;
+        border-radius: 5px;
+        padding: 12px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #ffc107;
+        font-size: 0.85rem;
+    }
+
+    .warning-icon {
+        font-size: 1.2rem;
+    }
+
+    .security-info {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 20px;
+        align-items: center;
+        padding: 15px;
+        background: rgba(0, 170, 255, 0.05);
+        border: 1px solid rgba(0, 170, 255, 0.2);
+        border-radius: 5px;
+    }
+
+    .security-description {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .security-icon {
+        font-size: 1.5rem;
+        color: #00aaff;
+    }
+
+    .security-text h4 {
+        margin: 0 0 5px 0;
+        color: #00aaff;
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+
+    .security-text p {
+        margin: 0;
+        color: #888;
+        font-size: 0.8rem;
+        line-height: 1.4;
+    }
+
+    .security-info .profile-action-btn {
+        width: auto;
+        min-width: 140px;
+    }
+
+    .danger-zone {
+        display: grid;
+        gap: 20px;
+    }
+
+    .danger-item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 20px;
+        align-items: center;
+        padding: 15px;
+        background: rgba(255, 107, 107, 0.05);
+        border: 1px solid rgba(255, 107, 107, 0.2);
+        border-radius: 5px;
+    }
+
+    .danger-info h4 {
+        margin: 0 0 5px 0;
+        color: #ff6b6b;
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+
+    .danger-info p {
+        margin: 0;
+        color: #888;
+        font-size: 0.8rem;
+        line-height: 1.4;
+    }
+
+    .danger-item .profile-action-btn {
+        width: auto;
+        min-width: 140px;
+    }
+
     /* Responsive Design */
     @media (max-width: 768px) {
         .main-content {
@@ -1087,5 +2522,333 @@ async function addSecret(secret_type){
             flex: 1;
             min-width: 100px;
         }
+
+        /* Modal Responsive */
+        .modal-container {
+            width: 95%;
+            margin: 10px;
+        }
+
+        .modal-header {
+            padding: 15px 20px;
+        }
+
+        .modal-title {
+            font-size: 1rem;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .info-item {
+            grid-template-columns: 1fr;
+            gap: 5px;
+        }
+
+        .danger-item {
+            grid-template-columns: 1fr;
+            gap: 15px;
+            text-align: center;
+        }
+
+        .danger-item .profile-action-btn {
+            width: 100%;
+        }
+
+        /* Profile Content Responsive */
+        .profile-sections {
+            max-width: none;
+        }
+
+        .profile-header {
+            flex-direction: column;
+            gap: 15px;
+            text-align: center;
+        }
+
+        /* MFA Modal Responsive */
+        .mfa-modal {
+            width: 98%;
+            max-height: 95vh;
+            overflow-y: auto;
+        }
+
+        .mfa-setup-content {
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        .qr-code {
+            width: 150px;
+            height: 150px;
+        }
+
+        .verification-form {
+            flex-direction: column;
+            gap: 15px;
+            align-items: stretch;
+        }
+
+        .verification-input {
+            width: 100%;
+            text-align: center;
+        }
+
+        .verify-btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+
+    /* Add Secret Sidebar Styles */
+    .add-secret-sidebar {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #333;
+    }
+
+    .sidebar-header {
+        margin-bottom: 15px;
+    }
+
+    .sidebar-title {
+        font-size: 0.9rem;
+        color: #888;
+        margin: 0;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .sidebar-dropdown-section {
+        margin-bottom: 20px;
+    }
+
+    .dropdown-label {
+        display: block;
+        font-size: 0.8rem;
+        color: #888;
+        margin-bottom: 8px;
+        font-family: 'JetBrains Mono', monospace;
+        text-transform: lowercase;
+    }
+
+    .sidebar-dropdown {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid #333;
+        color: #00ff41;
+        padding: 10px 12px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='%2300ff41' viewBox='0 0 16 16'%3e%3cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        background-size: 12px;
+        padding-right: 35px;
+    }
+
+    .sidebar-dropdown:hover {
+        border-color: #00ff41;
+        background-color: rgba(0, 255, 65, 0.05);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 255, 65, 0.2);
+    }
+
+    .sidebar-dropdown:focus {
+        outline: none;
+        border-color: #00aaff;
+        box-shadow: 0 0 0 2px rgba(0, 170, 255, 0.3);
+    }
+
+    .sidebar-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .sidebar-input {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid #333;
+        color: #00ff41;
+        padding: 10px 12px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        transition: all 0.3s ease;
+        box-sizing: border-box;
+    }
+
+    .sidebar-input:hover {
+        border-color: #00ff41;
+        background-color: rgba(0, 255, 65, 0.05);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 255, 65, 0.2);
+    }
+
+    .sidebar-input:focus {
+        outline: none;
+        border-color: #00aaff;
+        background-color: rgba(0, 170, 255, 0.08);
+        box-shadow: 0 0 0 2px rgba(0, 170, 255, 0.3);
+        transform: translateY(-1px);
+    }
+
+    .sidebar-input::placeholder {
+        color: #666;
+        font-style: italic;
+    }
+
+    .sidebar-textarea {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid #333;
+        color: #00ff41;
+        padding: 10px 12px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        transition: all 0.3s ease;
+        resize: vertical;
+        min-height: 60px;
+        box-sizing: border-box;
+    }
+
+    .sidebar-textarea:hover {
+        border-color: #00ff41;
+        background-color: rgba(0, 255, 65, 0.05);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 255, 65, 0.2);
+    }
+
+    .sidebar-textarea:focus {
+        outline: none;
+        border-color: #00aaff;
+        background-color: rgba(0, 170, 255, 0.08);
+        box-shadow: 0 0 0 2px rgba(0, 170, 255, 0.3);
+        transform: translateY(-1px);
+    }
+
+    .sidebar-textarea::placeholder {
+        color: #666;
+        font-style: italic;
+    }
+
+    .sidebar-add-btn {
+        background: linear-gradient(45deg, #00ff41, #00cc33);
+        border: none;
+        color: #000;
+        padding: 12px 16px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 8px;
+        text-transform: uppercase;
+    }
+
+    .sidebar-add-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 255, 65, 0.4);
+        background: linear-gradient(45deg, #00ff41, #00aa2a);
+    }
+
+    .sidebar-add-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 8px rgba(0, 255, 65, 0.3);
+    }
+
+    .sidebar-add-btn.disabled,
+    .sidebar-add-btn:disabled {
+        background: rgba(102, 102, 102, 0.3);
+        color: #666;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+
+    .sidebar-add-btn.disabled:hover,
+    .sidebar-add-btn:disabled:hover {
+        background: rgba(102, 102, 102, 0.3);
+        transform: none;
+        box-shadow: none;
+    }
+
+    .vault-required-notice {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 6px 10px;
+        background: rgba(255, 193, 7, 0.1);
+        border: 1px solid rgba(255, 193, 7, 0.3);
+        border-radius: 4px;
+        font-size: 0.8rem;
+    }
+
+    .warning-icon {
+        color: #ffc107;
+        font-size: 0.9rem;
+    }
+
+    .notice-text {
+        color: #ffc107;
+        font-style: italic;
+    }
+
+    .sidebar-file-upload {
+        display: block;
+        background: rgba(0, 0, 0, 0.8);
+        border: 2px dashed #333;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .sidebar-file-upload:hover {
+        border-color: #00aaff;
+        background: rgba(0, 170, 255, 0.05);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 170, 255, 0.2);
+    }
+
+    .file-upload-text {
+        color: #00aaff;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .sidebar-file-info {
+        background: rgba(0, 170, 255, 0.1);
+        border: 1px solid #00aaff;
+        border-radius: 5px;
+        padding: 8px 12px;
+        font-size: 0.8rem;
+        color: #00aaff;
+        margin-top: 8px;
+    }
+
+    .file-detail {
+        display: block;
+        margin-bottom: 4px;
+    }
+
+    .file-detail:last-child {
+        margin-bottom: 0;
     }
 </style>

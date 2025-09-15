@@ -1,6 +1,6 @@
 
-
-
+import { navigate } from "svelte-routing";
+import { userKey } from "../stores/user-key.js";
 
 export async function deriveKey(password, salt){
 
@@ -32,12 +32,46 @@ export async function deriveKey(password, salt){
 
 
 
-
    return {
       key
    };
 
 
+
+}
+
+export async function loginCrypto(data, password){
+
+   
+    localStorage.setItem("access_token", data.access_token);
+
+    const salt = Uint8Array.from(atob(data.user.salt), c => c.charCodeAt(0));
+    const encryptedUserKey = Uint8Array.from(atob(data.user.user_key), c => c.charCodeAt(0));
+    const iv = Uint8Array.from(atob(data.user.iv), c => c.charCodeAt(0));
+
+    const { key: derivedKey } = await deriveKey(password, salt);
+
+    const decrypted_user_key = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv},
+        derivedKey,
+        encryptedUserKey
+    );
+
+
+    const importedUserKey = await crypto.subtle.importKey(
+    "raw",
+    decrypted_user_key,
+    { name: "AES-GCM" },
+    true,
+    ["encrypt", "decrypt"]
+);
+
+    userKey.set(importedUserKey);
+
+
+    navigate("/app");
+    localStorage.removeItem("preauth_token");
+    return "Successfully logged in!";
 
 }
 

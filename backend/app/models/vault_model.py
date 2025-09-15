@@ -1,7 +1,7 @@
 from sqlalchemy import Integer, String, ForeignKey, DateTime, func, LargeBinary
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
-from database import Base
+from app.database import Base
 from .secret_model import Secret
 from typing import List
 

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from schemas import user_schema
+from app.schemas import user_schema
 
 
 class AuthResponse(BaseModel):
@@ -10,3 +10,7 @@ class AuthResponse(BaseModel):
 class Credentials(BaseModel):
     email: str
     password: str
+
+class PreAuth(BaseModel):
+    mfa_required: bool = True
+    preauth_token: str

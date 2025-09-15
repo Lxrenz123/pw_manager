@@ -2,10 +2,10 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from pydantic import BaseModel
-from models import user_model, vault_model
-from database import PgAsyncSession
-from schemas import vault_schema
-from auth import get_current_user
+from app.models import user_model, vault_model
+from app.database import PgAsyncSession
+from app.schemas import vault_schema
+from app.auth import get_current_user
 
 router = APIRouter(
     prefix="/vault",

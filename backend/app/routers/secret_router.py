@@ -2,10 +2,10 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-from models import user_model, vault_model, secret_model
-from database import PgAsyncSession
-from schemas import secret_schema
-from auth import get_current_user
+from app.models import user_model, vault_model, secret_model
+from app.database import PgAsyncSession
+from app.schemas import secret_schema
+from app.auth import get_current_user
 
 router = APIRouter(
     prefix="/secret",
@@ -32,20 +32,10 @@ async def create_secret(session: PgAsyncSession, vault_id: int, secret_type: str
             detail=f"Invalid secret type '{secret_type}'. Valid types are: {valid_types}"
         )
     
-    stmt = select(secret_model.Secret).join(vault_model.Vault).where(
-            secret_model.Secret.title == secret_data.title, 
-            secret_model.Secret.vault_id == vault_id, 
-            vault_model.Vault.owner_id == user.id
-        )
-    result = await session.execute(stmt)
-    existing_secret = result.scalars().first()
 
-    if existing_secret:
-        raise HTTPException(status_code=400, detail=f"A secret with the title '{existing_secret.title}' exists already")
-    
+
     secret = secret_model.Secret(
         type = secret_type_enum,
-        title = secret_data.title,
         data_encrypted = secret_data.data_encrypted,
         vault_id = vault_id,
         encrypted_secret_key = secret_data.encrypted_secret_key,
@@ -102,8 +92,7 @@ async def update_secret(session: PgAsyncSession, secret_id: int, secret_data: se
     if not secret:
         raise HTTPException(status_code=404, detail="Not found")
 
-    if secret_data.title not in (None, ""):
-        secret.title = secret_data.title
+
     if secret_data.data_encrypted not in (None, ""):
         secret.data_encrypted = secret_data.data_encrypted
     try:
@@ -128,4 +117,4 @@ async def delete_secret(session: PgAsyncSession, secret_id: int, user: user_mode
     await session.delete(secret_to_delete)
     await session.commit()
 
-    return f"Successfully deleted secret {secret_to_delete.title}"
+    return f"Successfully deleted secret"

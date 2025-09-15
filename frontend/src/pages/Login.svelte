@@ -3,10 +3,47 @@
     import { apiBase } from "../script/api-base-url";
     import { deriveKey } from "../script/crypto.js";
     import { userKey } from "../stores/user-key.js";
+    import { loginCrypto } from "../script/crypto.js";
 
-    let email = "";
+
+    let preauth_token;
+    let userData;
+    let mfaCode = $state("");
+    let showMFA = $state(false);
+
+    async function verify2FA(){
+        result = "";
+
+
+        preauth_token = localStorage.getItem("preauth_token");
+        const response = await fetch(`${apiBase}/auth/2fa-verify`, {
+        method: "POST",
+        headers: {
+        'Content-Type': 'application/json',
+        'accept': "application/json",
+        },
+        body: JSON.stringify({"preauth_token": preauth_token, "code": mfaCode})
+    
+    });
+
+        const data = await response.json();
+
+        if (!response.ok){
+
+            result = data.detail || "2FA verification failed";
+            return;
+        }
+
+ 
+
+        return loginCrypto(data, password)
+    }
+
+
+
+    let email = $state("");
     let password = "";
-    let result = "";
+    let result = $state("");
 
 
     async function login(){
@@ -28,34 +65,16 @@
 
     }
 
-    localStorage.setItem("access_token", data.access_token);
+    if (data.mfa_required){
 
-    const salt = Uint8Array.from(atob(data.user.salt), c => c.charCodeAt(0));
-    const encryptedUserKey = Uint8Array.from(atob(data.user.user_key), c => c.charCodeAt(0));
-    const iv = Uint8Array.from(atob(data.user.iv), c => c.charCodeAt(0));
-
-    const { key: derivedKey } = await deriveKey(password, salt);
-
-    const decrypted_user_key = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv},
-        derivedKey,
-        encryptedUserKey
-    );
+        localStorage.setItem("preauth_token", data.preauth_token)
+        
+        showMFA = true;
+        return {"MFA required: ": data.mfa_required}
+    }
 
 
-    const importedUserKey = await crypto.subtle.importKey(
-    "raw",
-    decrypted_user_key,
-    { name: "AES-GCM" },
-    true,
-    ["encrypt", "decrypt"]
-);
-
-    userKey.set(importedUserKey);
-
-
-    navigate("/app");
-    return "Successfully logged in!";
+    return loginCrypto(data, password)
 
     
 }
@@ -71,7 +90,11 @@
                 <span class="text">Password123</span>
                 <span class="brackets">]</span>
             </h1>
-            <p class="subtitle">// Secure Password Management System</p>
+            {#if showMFA}
+                <p class="subtitle">// Two-Factor Authentication Required</p>
+            {:else}
+                <p class="subtitle">// Secure Password Management System</p>
+            {/if}
         </div>
 
         {#if result}
@@ -81,43 +104,88 @@
             </div>
         {/if}
 
-        <form class="login-form" on:submit|preventDefault={login}>
-            <div class="form-group">
-                <label for="username" class="label">
-                    <span class="prompt">root@cipher:~$</span> enter_email
-                </label>
-                <input 
-                    id="username" 
-                    name="username" 
-                    type="email" 
-                    placeholder="user@domain.tld"
-                    bind:value={email}
-                    class="input"
-                    required
-                />
+        {#if !showMFA}
+            <form class="login-form" on:submit|preventDefault={login} method="POST">
+                <div class="form-group">
+                    <label for="username" class="label">
+                        <span class="prompt">root@password123:~$</span> enter_email
+                    </label>
+                    <input 
+                        id="username" 
+                        name="username" 
+                        type="email" 
+                        placeholder="user@domain.tld"
+                        bind:value={email}
+                        class="input"
+                        required
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label for="password" class="label">
+                        <span class="prompt">root@password123:~$</span> enter_password
+                    </label>
+                    <input 
+                        type="password" 
+                        name="password" 
+                        id="password" 
+                        placeholder="••••••••••••"
+                        bind:value={password}
+                        class="input"
+                        required
+                    />
+                </div>
+                
+
+                <button type="submit" class="submit-btn">
+                    <span class="btn-text">./authenticate.sh</span>
+                    <span class="btn-arrow">→</span>
+                </button>
+            </form>
+        {/if}
+        
+        {#if showMFA}
+            <div class="mfa-section">
+                <div class="mfa-header">
+                    <h2 class="mfa-title">
+                        <span class="mfa-icon">🔐</span>
+                        Two-Factor Authentication
+                    </h2>
+                    <p class="mfa-subtitle">// Enter the 6-digit code from your authenticator app</p>
+                </div>
+                
+                <form class="mfa-form" on:submit|preventDefault={verify2FA}>
+                    <div class="form-group">
+                        <label for="mfa-code" class="label mfa-label">
+                            <span class="prompt">root@password123:~$</span> enter_2fa_code
+                        </label>
+                        <input 
+                            id="mfa-code" 
+                            name="mfa-code" 
+                            type="text"
+                            placeholder="000000"
+                            bind:value={mfaCode}
+                            class="input mfa-input"
+                            maxlength="6"
+                            required
+                        />
+                    </div>
+                    
+                    <button type="submit" class="submit-btn mfa-btn">
+                        <span class="btn-text">./verify_2fa.sh</span>
+                        <span class="btn-arrow">✓</span>
+                    </button>
+                    
+                    <button 
+                        type="button" 
+                        class="back-btn" 
+                        on:click={() => { showMFA = false; mfaCode = ""; result = ""; }}
+                    >
+                        <span class="btn-text">← Back to Login</span>
+                    </button>
+                </form>
             </div>
-
-            <div class="form-group">
-                <label for="password" class="label">
-                    <span class="prompt">root@cipher:~$</span> enter_password
-                </label>
-                <input 
-                    type="password" 
-                    name="password" 
-                    id="password" 
-                    placeholder="••••••••••••"
-                    bind:value={password}
-                    class="input"
-                    required
-                />
-            </div>
-
-            <button type="submit" class="submit-btn">
-                <span class="btn-text">./authenticate.sh</span>
-                <span class="btn-arrow">→</span>
-            </button>
-        </form>
-
+        {/if}
         <div class="footer">
             <a href="/register" class="register-link">
                 <span class="prompt">></span> create_new_account()
@@ -315,6 +383,147 @@
 
     .submit-btn:hover .btn-arrow {
         transform: translateX(5px);
+    }
+
+    /* 2FA Section Styles */
+    .mfa-section {
+        margin-top: 0;
+        padding-top: 0;
+        animation: slideIn 0.5s ease-out;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .mfa-header {
+        text-align: center;
+        margin-bottom: 25px;
+    }
+
+    .mfa-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0 0 8px 0;
+        color: #00aaff;
+        text-shadow: 0 0 15px rgba(0, 170, 255, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }
+
+    .mfa-icon {
+        font-size: 1.3rem;
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { 
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% { 
+            transform: scale(1.1);
+            opacity: 0.8;
+        }
+    }
+
+    .mfa-subtitle {
+        color: #888;
+        font-size: 0.85rem;
+        margin: 0;
+        font-style: italic;
+    }
+
+    .mfa-label {
+        color: #00aaff;
+    }
+
+    .mfa-input {
+        text-align: center;
+        letter-spacing: 0.8rem;
+        font-size: 1.8rem;
+        color: #00aaff;
+        border-color: #00aaff;
+        background: rgba(0, 0, 0, 0.8);
+        font-weight: 700;
+        text-shadow: 0 0 10px rgba(0, 170, 255, 0.5);
+    }
+
+    .mfa-input:focus {
+        border-color: #00aaff;
+        box-shadow: 
+            0 0 20px rgba(0, 170, 255, 0.4),
+            inset 0 0 10px rgba(0, 170, 255, 0.1);
+        background: rgba(0, 0, 0, 0.9);
+    }
+
+    .mfa-input::placeholder {
+        color: #444;
+        letter-spacing: 0.8rem;
+        opacity: 0.7;
+    }
+
+    .mfa-btn {
+        background: linear-gradient(45deg, #00aaff, #0088cc);
+        box-shadow: 0 5px 15px rgba(0, 170, 255, 0.3);
+        border: 1px solid #00aaff;
+        margin-bottom: 15px;
+    }
+
+    .mfa-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 7px 20px rgba(0, 170, 255, 0.5);
+        background: linear-gradient(45deg, #0088cc, #00aaff);
+    }
+
+    .mfa-btn .btn-arrow {
+        font-size: 1.1rem;
+        color: #000;
+    }
+
+    .back-btn {
+        width: 100%;
+        padding: 12px;
+        background: rgba(136, 136, 136, 0.1);
+        border: 1px solid #666;
+        border-radius: 5px;
+        color: #888;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .back-btn:hover {
+        background: rgba(136, 136, 136, 0.2);
+        color: #bbb;
+        border-color: #888;
+        transform: translateY(-1px);
+    }
+
+    /* Responsive adjustments for 2FA */
+    @media (max-width: 480px) {
+        .mfa-title {
+            font-size: 1.2rem;
+        }
+        
+        .mfa-input {
+            font-size: 1.5rem;
+            letter-spacing: 0.5rem;
+        }
     }
 
     .footer {

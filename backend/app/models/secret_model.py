@@ -1,7 +1,7 @@
 from sqlalchemy import Integer, String, ForeignKey, DateTime, func, Enum, LargeBinary
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
-from database import Base
+from app.database import Base
 import enum
 
 class SecretType(enum.Enum):
@@ -15,7 +15,6 @@ class Secret(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     type: Mapped[SecretType] = mapped_column(Enum(SecretType), nullable=False)
-    title: Mapped[str] = mapped_column(String, nullable=False)
     data_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
     encrypted_secret_key: Mapped[str] = mapped_column(String, nullable=True) #nullabletrue später in false ändern nur zum testen
