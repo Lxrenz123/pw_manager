@@ -47,6 +47,10 @@
     let activeSecretType = $state("credential"); // Track which form is active
     let visiblePasswords = $state(new Set()); // Track which passwords are visible
 
+    let newPW = $state("");
+    let currentPW = $state("");
+    let confirmPW = $state("");
+
     async function updateEmail(){
         
         const response = await fetch(`${apiBase}/user/email`, {
@@ -61,6 +65,7 @@
 
         if (!response.ok){
             throw new Error("Error");
+            return;
         }
 
         user = await response.json();
@@ -70,6 +75,34 @@
         return user.email
 
     }
+    let errormsg = $state("");
+    async function updatePassword(){
+
+        if (newPW != confirmPW){
+            errormsg = "passwords do not match!";
+        }
+
+ 
+        const response = await fetch(`${apiBase}/user/password`, {
+        method: "PATCH",
+        headers: {
+        'Content-Type': 'application/json',
+        'accept': "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        },
+        body: JSON.stringify({"current_password": currentPW, "password": newPW})
+    });
+
+        if (!response.ok){
+            throw new Error("Error");
+
+        }
+
+
+        return "Password successfully updated!"
+
+    }
+
 
     function logout() {
         localStorage.removeItem("access_token");
@@ -90,6 +123,7 @@
 
         if (!response.ok){
             throw new Error("Error");
+            return;
         }
 
         user = await response.json();
@@ -121,6 +155,7 @@
 
         if (!response.ok){
             throw new Error("Error");
+            return;
         }
 
         mfaSetupData = await response.json();
@@ -149,6 +184,7 @@
 
         if (!response.ok){
             throw new Error("Error");
+            return;
         }
 
         mfaConfirm = await response.json();
@@ -175,6 +211,7 @@
 
         if (!response.ok){
             throw new Error("Error");
+            return;
         }
 
         navigate("/");
@@ -192,6 +229,7 @@
 
         if (!response.ok){
             throw new Error("Error");
+            return;
         }
 
         const secrets = await response.json();
@@ -337,6 +375,7 @@ async function getVaults(){
     
     if (!response.ok){
         throw new Error("Network error");
+        return;
     }
 
     // Auto-select the first vault if no vault is currently selected and vaults exist
@@ -360,6 +399,7 @@ async function addVault(){
                     )
     if (!response.ok){
         throw new Error("Network error");
+        return;
     }
 
     const newVault = await response.json()
@@ -384,6 +424,7 @@ async function getSecretsOfVault(vaultId){
 
     if (!response.ok){
         throw new Error("Network error");
+        return;
     }
     const encryptedSecrets = await response.json(); 
     selectedVaultId = vaultId;
@@ -572,6 +613,7 @@ async function addSecret(secret_type){
 
     if (!response.ok){
         throw new Error("Network error");
+        return;
     }
 
     const newSecret = await response.json()
@@ -889,6 +931,7 @@ title = "";
                             <div class="form-group">
                                 <label class="form-label">current_password:</label>
                                 <input 
+                                    bind:value={currentPW}
                                     type="password" 
                                     class="profile-input" 
                                     placeholder="enter current master password"
@@ -896,7 +939,8 @@ title = "";
                             </div>
                             <div class="form-group">
                                 <label class="form-label">new_password:</label>
-                                <input 
+                                <input
+                                    bind:value={newPW}
                                     type="password" 
                                     class="profile-input" 
                                     placeholder="enter new master password"
@@ -905,12 +949,13 @@ title = "";
                             <div class="form-group">
                                 <label class="form-label">confirm_password:</label>
                                 <input 
+                                    bind:value={confirmPW}
                                     type="password" 
                                     class="profile-input" 
                                     placeholder="confirm new master password"
                                 />
                             </div>
-                            <button class="profile-action-btn danger">
+                            <button class="profile-action-btn danger" disabled={newPW !== confirmPW} onclick={updatePassword}>
                                 <span>CHANGE PASSWORD</span>
                                 <span class="btn-icon">🔐</span>
                             </button>

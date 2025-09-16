@@ -62,7 +62,7 @@
 
         result = data.detail;
         throw new Error("Failed");
-
+        return;
     }
 
     if (data.mfa_required){

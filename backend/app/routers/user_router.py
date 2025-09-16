@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from app.models import user_model
-from app.auth import hash_password, get_current_user
+from app.auth import hash_password, get_current_user, verify_password
 from app.database import PgAsyncSession
 from app.schemas import user_schema
 
@@ -67,6 +67,9 @@ async def update_password(session: PgAsyncSession, update_data: user_schema.Upda
     user_to_update = result.scalars().first()
     if not user_to_update:
         raise HTTPException(status_code=404, detail="User not found or not authenticated")
+    
+    if not verify_password(update_data.current_password, user_to_update.password):
+        raise HTTPException(status_code=400, detail="Wrong master password")
     
     if update_data.password not in (None, ""):
         user_to_update.password = hash_password(update_data.password)
