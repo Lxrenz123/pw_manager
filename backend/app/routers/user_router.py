@@ -37,6 +37,20 @@ async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSessi
 async def read_me(current_user: user_model.User = Depends(get_current_user)):
     return current_user
 
+@router.get("/salt", description="get salt of user's user key")
+async def get_salt(session: PgAsyncSession, user: user_model.User = Depends(get_current_user)):
+    stmt = select(user_model.User).where(user_model.User.id == user.id)
+    result = await session.execute(stmt)
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(status_code=403, detail=f"This user does not exist or you are not that user!")
+    
+    user_salt = user.salt
+
+    return user_salt
+
+
 @router.patch("/email", response_model=user_schema.UserOut)
 async def update_email(session: PgAsyncSession, update_data: user_schema.UpdateUserEmail, user: user_model.User = Depends(get_current_user)):
     stmt = select(user_model.User).where(user_model.User.id == user.id)
@@ -73,17 +87,24 @@ async def update_password(session: PgAsyncSession, update_data: user_schema.Upda
     
     if update_data.password not in (None, ""):
         user_to_update.password = hash_password(update_data.password)
+
+    user_to_update.iv = update_data.iv
+    user_to_update.user_key = update_data.user_key
     
     await session.commit()
     await session.refresh(user_to_update)
 
-    return f"successfully updated users {user_to_update.email} password"
+    return "Password successfully updated!"
     
 @router.delete("/")
-async def delete_user_me(session: PgAsyncSession, user: user_model.User = Depends(get_current_user)):
+async def delete_user_me(session: PgAsyncSession, password: user_schema.UserDelete, user: user_model.User = Depends(get_current_user)):
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user_to_delete = result.scalars().first()
+
+    if not verify_password(password.password, user_to_delete.password):
+        raise HTTPException(status_code=400, detail="Wrong Master password!")
+
 
     await session.delete(user_to_delete)
     await session.commit()

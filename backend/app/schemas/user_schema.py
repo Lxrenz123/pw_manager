@@ -38,7 +38,6 @@ class UserOutInfoMe(BaseModel):
 class UserLogin(BaseModel):
     id: int
     email: str
-    user_key: str
     user_key: str  # base64 encoded
     iv: str        # base64 encoded
     salt: str      # base64 encoded
@@ -57,4 +56,9 @@ class UpdateUserEmail(BaseModel):
 
 class UpdateUserPassword(BaseModel):
     current_password: str
+    password: str
+    user_key: str
+    iv: str
+
+class UserDelete(BaseModel):
     password: str
