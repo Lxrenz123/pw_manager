@@ -274,6 +274,164 @@
 
 
     let confirmMasterPW = $state("");
+    let secretId = $state("");
+    let showDeleteSecretModal = $state(false);
+    let secretToDelete = $state(null);
+
+    function confirmDeleteSecret(id) {
+        secretToDelete = secrets.find(s => s.id === id);
+        secretId = id;
+        showDeleteSecretModal = true;
+    }
+
+    function cancelDeleteSecret() {
+        showDeleteSecretModal = false;
+        secretToDelete = null;
+        secretId = null;
+    }
+
+    async function deleteSecret(){
+        try {
+            const response = await fetch(`${apiBase}/secret/${secretId}`, {
+                method: "DELETE",
+                headers: {
+                'Content-Type': 'application/json',
+                'accept': "application/json",
+                "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+                }, 
+            });
+
+            if (!response.ok){
+                throw new Error("Failed to delete secret");
+            }
+
+            // Remove the secret from the local array
+            secrets = secrets.filter(s => s.id !== secretId);
+            
+            // Close modal and reset state
+            showDeleteSecretModal = false;
+            secretToDelete = null;
+            secretId = null;
+
+        } catch (error) {
+            console.error("Error deleting secret:", error);
+            alert("Failed to delete secret. Please try again.");
+        }
+    }
+
+let showEditSecretModal = $state(false);
+let secretToEdit = $state(null);
+let editedSecretData = $state({});
+let isEditingSecret = $state(false);
+
+// Add this function to open the edit modal
+function openEditSecret(secret) {
+    secretToEdit = secret;
+    // Clone the secret data for editing
+    editedSecretData = JSON.parse(JSON.stringify(secret.data));
+    showEditSecretModal = true;
+}
+
+function cancelEditSecret() {
+    showEditSecretModal = false;
+    secretToEdit = null;
+    editedSecretData = {};
+}
+  async function updateSecret() {
+    if (!secretToEdit || !editedSecretData) return;
+    
+    try {
+        isEditingSecret = true;
+
+        // Generate new encryption for the updated data
+        const secretKeyBytes = crypto.getRandomValues(new Uint8Array(32));
+        const secretKey = await crypto.subtle.importKey(
+            "raw",
+            secretKeyBytes,
+            { name: "AES-GCM" },
+            true,
+            ["encrypt", "decrypt"]
+        );
+
+        const encoder = new TextEncoder();
+        const plaintext = encoder.encode(JSON.stringify(editedSecretData));
+        const secretIv = crypto.getRandomValues(new Uint8Array(12));
+
+        const encryptedSecret = await crypto.subtle.encrypt(
+            { name: "AES-GCM", iv: secretIv },
+            secretKey,
+            plaintext
+        );
+
+        const userKeyValue = get(userKey);
+        if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
+            localStorage.removeItem("access_token");
+            navigate("/login");
+            return;
+        }
+
+        const secretKeyIv = crypto.getRandomValues(new Uint8Array(12));
+        const encryptedSecretKey = await crypto.subtle.encrypt(
+            { name: "AES-GCM", iv: secretKeyIv },
+            userKeyValue,
+            secretKeyBytes
+        );
+
+        // Convert to base64
+        function arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary);
+        }
+
+        const encryptedSecretB64 = arrayBufferToBase64(encryptedSecret);
+        const secretIvB64 = arrayBufferToBase64(secretIv);
+        const encryptedSecretKeyB64 = arrayBufferToBase64(encryptedSecretKey);
+        const secretKeyIvB64 = arrayBufferToBase64(secretKeyIv);
+
+        const response = await fetch(`${apiBase}/secret/${secretToEdit.id}`, {
+            method: "PATCH",
+            headers: {
+                'Content-Type': 'application/json',
+                'accept': "application/json",
+                "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+            },
+            body: JSON.stringify({
+                data_encrypted: encryptedSecretB64,
+                secret_iv: secretIvB64,
+                encrypted_secret_key: encryptedSecretKeyB64,
+                secret_key_iv: secretKeyIvB64
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error("Failed to update secret");
+        }
+
+        // Update the secret in the local array
+        const secretIndex = secrets.findIndex(s => s.id === secretToEdit.id);
+        if (secretIndex !== -1) {
+            secrets[secretIndex] = {
+                ...secrets[secretIndex],
+                data: editedSecretData
+            };
+        }
+
+        // Close modal and reset state
+        showEditSecretModal = false;
+        secretToEdit = null;
+        editedSecretData = {};
+
+    } catch (error) {
+        console.error("Error updating secret:", error);
+        alert("Failed to update secret. Please try again.");
+    } finally {
+        isEditingSecret = false;
+    }
+}
 
     async function deleteMe(){
 
@@ -1122,7 +1280,16 @@ title = "";
                                             DATA
                                         {/if}
                                     </span>
-                                    <button class="secret-action">⋯</button>
+                                    <div class="secret-actions">
+                                        <button class="secret-action-btn update-btn" onclick={() => openEditSecret(secret)}>
+                                            <span class="update-icon">🖊️</span>
+                                        </button>
+                                        <button class="secret-action-btn delete-btn" onclick={() => confirmDeleteSecret(secret.id)}>
+                                            <span class="delete-icon">🗑️</span>
+                                        </button>
+                                
+                                    </div>
+
                                 </div>
                             </div>
                             
@@ -1226,7 +1393,174 @@ title = "";
             {/if}
         </section>
     </main>
-
+<!-- Add this after the MFA Setup Modal -->
+<!-- Edit Secret Modal -->
+{#if showEditSecretModal && secretToEdit}
+    <div class="modal-overlay" onclick={cancelEditSecret}>
+        <div class="modal-container edit-modal" onclick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+                <h2 class="modal-title">
+                    <span class="modal-icon">✏️</span>
+                    <span>Edit Secret</span>
+                </h2>
+                <button class="modal-close" onclick={cancelEditSecret}>
+                    ×
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="edit-content">
+                    <div class="edit-form">
+                        {#if editedSecretData.username !== undefined}
+                            <!-- Credential Form -->
+                            <div class="form-section">
+                                <h3 class="form-section-title">$ edit_credential --update</h3>
+                                <div class="form-group">
+                                    <label class="form-label">title:</label>
+                                    <input 
+                                        type="text" 
+                                        class="edit-input" 
+                                        bind:value={editedSecretData.title}
+                                        placeholder="Secret title"
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">username:</label>
+                                    <input 
+                                        type="text" 
+                                        class="edit-input" 
+                                        bind:value={editedSecretData.username}
+                                        placeholder="Username"
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">password:</label>
+                                    <input 
+                                        type="password" 
+                                        class="edit-input" 
+                                        bind:value={editedSecretData.password}
+                                        placeholder="Password"
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">url:</label>
+                                    <input 
+                                        type="url" 
+                                        class="edit-input" 
+                                        bind:value={editedSecretData.url}
+                                        placeholder="Website URL (optional)"
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">notes:</label>
+                                    <textarea 
+                                        class="edit-textarea" 
+                                        bind:value={editedSecretData.note}
+                                        placeholder="Additional notes (optional)"
+                                        rows="3"
+                                    ></textarea>
+                                </div>
+                            </div>
+                        {:else if editedSecretData.content !== undefined}
+                            <!-- Note Form -->
+                            <div class="form-section">
+                                <h3 class="form-section-title">$ edit_note --update</h3>
+                                <div class="form-group">
+                                    <label class="form-label">title:</label>
+                                    <input 
+                                        type="text" 
+                                        class="edit-input" 
+                                        bind:value={editedSecretData.title}
+                                        placeholder="Note title"
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">content:</label>
+                                    <textarea 
+                                        class="edit-textarea" 
+                                        bind:value={editedSecretData.content}
+                                        placeholder="Note content"
+                                        rows="6"
+                                    ></textarea>
+                                </div>
+                            </div>
+                        {:else if editedSecretData.fileName !== undefined || editedSecretData.file !== undefined}
+                            <!-- Document Form -->
+                            <div class="form-section">
+                                <h3 class="form-section-title">$ edit_document --update</h3>
+                                <div class="form-group">
+                                    <label class="form-label">title:</label>
+                                    <input 
+                                        type="text" 
+                                        class="edit-input" 
+                                        bind:value={editedSecretData.title}
+                                        placeholder="Document title"
+                                    />
+                                </div>
+                                {#if editedSecretData.fileName}
+                                    <div class="current-file-info">
+                                        <div class="file-info-header">
+                                            <span class="file-icon">📄</span>
+                                            <span class="current-file-label">Current file:</span>
+                                        </div>
+                                        <div class="file-details">
+                                            <div class="file-detail">
+                                                <span class="detail-label">name:</span>
+                                                <span class="detail-value">{editedSecretData.fileName}</span>
+                                            </div>
+                                            <div class="file-detail">
+                                                <span class="detail-label">type:</span>
+                                                <span class="detail-value">{editedSecretData.fileType}</span>
+                                            </div>
+                                            <div class="file-detail">
+                                                <span class="detail-label">size:</span>
+                                                <span class="detail-value">{(editedSecretData.fileSize / 1024).toFixed(1)} KB</span>
+                                            </div>
+                                        </div>
+                                        <div class="file-actions">
+                                            <button class="file-action-btn" onclick={() => downloadFile(editedSecretData)}>
+                                                <span>📥 Download Current</span>
+                                            </button>
+                                        </div>
+                                        <div class="file-note">
+                                            <span class="note-icon">ℹ️</span>
+                                            <span class="note-text">Note: File content cannot be edited. Only title and description can be updated.</span>
+                                        </div>
+                                    </div>
+                                {:else}
+                                    <div class="form-group">
+                                        <label class="form-label">description:</label>
+                                        <textarea 
+                                            class="edit-textarea" 
+                                            bind:value={editedSecretData.file}
+                                            placeholder="Document description"
+                                            rows="4"
+                                        ></textarea>
+                                    </div>
+                                {/if}
+                            </div>
+                        {/if}
+                        
+                        <div class="edit-actions">
+                            <button class="edit-btn cancel" onclick={cancelEditSecret}>
+                                <span>CANCEL</span>
+                                <span class="btn-icon">↩️</span>
+                            </button>
+                            <button 
+                                class="edit-btn save" 
+                                onclick={updateSecret}
+                                disabled={isEditingSecret}
+                            >
+                                <span>{isEditingSecret ? 'UPDATING...' : 'SAVE CHANGES'}</span>
+                                <span class="btn-icon">{isEditingSecret ? '⏳' : '💾'}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
 <!-- Replace the existing showConfirmModal section -->
 {#if showConfirmModal}
     <div class="modal-overlay" onclick={cancelDelete}>
@@ -1284,6 +1618,58 @@ title = "";
         </div>
     </div>
 {/if}
+
+    <!-- Delete Secret Confirmation Modal -->
+    {#if showDeleteSecretModal}
+        <div class="modal-overlay" onclick={cancelDeleteSecret}>
+            <div class="modal-container confirm-modal" onclick={(e) => e.stopPropagation()}>
+                <div class="modal-header">
+                    <h2 class="modal-title">
+                        <span class="modal-icon">🗑️</span>
+                        <span>Delete Secret</span>
+                    </h2>
+                    <button class="modal-close" onclick={cancelDeleteSecret}>
+                        ×
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="warning-content">
+                        <div class="warning-message">
+                            <span class="warning-icon">⚠️</span>
+                            <div class="warning-text">
+                                <h3>Are you sure you want to delete this secret?</h3>
+                                <p><strong>Secret:</strong> {secretToDelete?.data?.title || 'Unknown'}</p>
+                                <p><strong>Type:</strong> 
+                                    {#if secretToDelete?.data?.content}
+                                        Note
+                                    {:else if secretToDelete?.data?.username}
+                                        Credential
+                                    {:else if secretToDelete?.data?.fileName || secretToDelete?.data?.file}
+                                        Document
+                                    {:else}
+                                        Data
+                                    {/if}
+                                </p>
+                                <p>This action cannot be undone. The secret will be permanently deleted from your vault.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="confirm-actions">
+                            <button class="confirm-btn cancel" onclick={cancelDeleteSecret}>
+                                <span>CANCEL</span>
+                                <span class="btn-icon">↩️</span>
+                            </button>
+                            <button class="confirm-btn delete" onclick={deleteSecret}>
+                                <span>DELETE SECRET</span>
+                                <span class="btn-icon">🗑️</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {/if}
 
     <!-- MFA Setup Modal -->
     {#if showMFASetup}
@@ -2066,20 +2452,44 @@ title = "";
         letter-spacing: 1px;
     }
 
-    .secret-action {
+    .secret-actions {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+    }
+
+    .secret-action-btn {
         background: none;
         border: none;
         color: #666;
-        font-size: 1.2rem;
         cursor: pointer;
-        padding: 5px;
-        border-radius: 3px;
+        padding: 8px;
+        border-radius: 4px;
         transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 32px;
+        height: 32px;
     }
 
-    .secret-action:hover {
-        color: #00ff41;
-        background: rgba(0, 255, 65, 0.1);
+    .secret-action-btn:hover {
+        background: rgba(255, 107, 107, 0.1);
+        color: #ff6b6b;
+        transform: scale(1.1);
+    }
+
+    .delete-btn {
+        border: 1px solid transparent;
+    }
+
+    .delete-btn:hover {
+        border-color: #ff6b6b;
+        box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+    }
+
+    .delete-icon {
+        font-size: 1rem;
     }
 
     .secret-body {
@@ -3060,7 +3470,280 @@ title = "";
         flex-direction: column;
         gap: 12px;
     }
+/* Add these styles to your existing <style> section */
 
+/* Edit button styling */
+.edit-btn {
+    background: rgba(0, 170, 255, 0.1);
+    border: 1px solid #00aaff;
+    color: #00aaff;
+}
+
+.edit-btn:hover {
+    background: rgba(0, 170, 255, 0.2);
+    border-color: #00aaff;
+    box-shadow: 0 2px 8px rgba(0, 170, 255, 0.3);
+}
+
+.update-btn {
+    background: rgba(0, 170, 255, 0.1);
+    border: 1px solid #00aaff;
+    color: #00aaff;
+}
+
+.update-btn:hover {
+    background: rgba(0, 170, 255, 0.2);
+    border-color: #00aaff;
+    box-shadow: 0 2px 8px rgba(0, 170, 255, 0.3);
+}
+
+.edit-icon, .update-icon {
+    font-size: 1rem;
+}
+
+/* Edit Modal Styles */
+.edit-modal {
+    max-width: 600px;
+    width: 95%;
+}
+
+.edit-content {
+    width: 100%;
+}
+
+.edit-form {
+    display: grid;
+    gap: 25px;
+}
+
+.form-section {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.form-section-title {
+    color: #00aaff;
+    font-size: 1rem;
+    margin: 0 0 20px 0;
+    font-weight: 500;
+    text-transform: lowercase;
+}
+
+.edit-input, .edit-textarea {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid #333;
+    color: #00ff41;
+    padding: 12px;
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    box-sizing: border-box;
+    transition: all 0.3s ease;
+}
+
+.edit-input:focus, .edit-textarea:focus {
+    outline: none;
+    border-color: #00aaff;
+    box-shadow: 0 0 10px rgba(0, 170, 255, 0.3);
+}
+
+.edit-textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.edit-input::placeholder, .edit-textarea::placeholder {
+    color: #666;
+    font-style: italic;
+}
+
+/* Current file info styling */
+.current-file-info {
+    background: rgba(0, 170, 255, 0.05);
+    border: 1px solid rgba(0, 170, 255, 0.2);
+    border-radius: 8px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.file-info-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.file-icon {
+    font-size: 1.2rem;
+}
+
+.current-file-label {
+    color: #00aaff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+}
+
+.file-details {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.file-detail {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 10px;
+    align-items: center;
+}
+
+.detail-label {
+    color: #888;
+    font-size: 0.8rem;
+    text-transform: lowercase;
+}
+
+.detail-value {
+    color: #00ff41;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.file-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.file-action-btn {
+    background: rgba(0, 255, 65, 0.1);
+    border: 1px solid #00ff41;
+    color: #00ff41;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.file-action-btn:hover {
+    background: rgba(0, 255, 65, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0, 255, 65, 0.3);
+}
+
+.file-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px;
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 5px;
+}
+
+.note-icon {
+    color: #ffc107;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.note-text {
+    color: #ffc107;
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+/* Edit actions */
+.edit-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.edit-btn {
+    padding: 12px 20px;
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: none;
+    text-transform: uppercase;
+}
+
+.edit-btn.cancel {
+    background: rgba(102, 102, 102, 0.3);
+    color: #888;
+    border: 1px solid #666;
+}
+
+.edit-btn.cancel:hover {
+    background: rgba(102, 102, 102, 0.5);
+    color: #aaa;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 102, 102, 0.3);
+}
+
+.edit-btn.save {
+    background: linear-gradient(45deg, #00aaff, #0088cc);
+    color: #000;
+    border: 1px solid #00aaff;
+}
+
+.edit-btn.save:hover:not(:disabled) {
+    background: linear-gradient(45deg, #0088cc, #0066aa);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 170, 255, 0.5);
+}
+
+.edit-btn.save:disabled {
+    background: rgba(102, 102, 102, 0.3);
+    color: #666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.6;
+}
+
+.edit-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .edit-actions {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .file-detail {
+        grid-template-columns: 1fr;
+        gap: 5px;
+    }
+    
+    .file-actions {
+        flex-direction: column;
+    }
+    
+    .file-action-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
     .sidebar-input {
         width: 100%;
         background: rgba(0, 0, 0, 0.8);

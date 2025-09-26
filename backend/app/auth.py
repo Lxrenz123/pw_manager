@@ -15,9 +15,6 @@ import time
 
 load_dotenv()
 
-OTP_KEY = os.getenv("OTP_KEY")
-
-
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
