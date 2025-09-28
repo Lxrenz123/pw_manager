@@ -8,4 +8,6 @@ class CreateSecret(BaseModel):
 
 class UpdateSecret(BaseModel):
     data_encrypted: bytes
-    
+    secret_iv: str
+    encrypted_secret_key: str    
+    secret_key_iv: str

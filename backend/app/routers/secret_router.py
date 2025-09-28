@@ -95,6 +95,15 @@ async def update_secret(session: PgAsyncSession, secret_id: int, secret_data: se
 
     if secret_data.data_encrypted not in (None, ""):
         secret.data_encrypted = secret_data.data_encrypted
+    if secret_data.secret_iv not in (None, ""):
+        secret.secret_iv = secret_data.secret_iv
+    if secret_data.secret_key_iv not in (None, ""):
+        secret.secret_key_iv = secret_data.secret_key_iv
+    if secret_data.encrypted_secret_key not in (None, ""):
+        secret.encrypted_secret_key = secret_data.encrypted_secret_key
+
+
+
     try:
         await session.commit()
         await session.refresh(secret)

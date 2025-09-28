@@ -56,6 +56,9 @@
 
     let emailUpdateSuccess = $state("");
     let passwordUpdateSuccess = $state("");
+    
+    let isGeneratingPassword = $state(false);
+    let showPasswordInForm = $state(false);
 
     async function disable2FA(){
 
@@ -78,6 +81,49 @@
 
         return "Successfully disabled 2FA"
     }
+    function generateSecurePassword() {
+        isGeneratingPassword = true;
+        
+     
+        const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+        const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const numbers = '0123456789';
+        const symbols = '!@#$%';
+        
+   
+        const allCharacters = lowercase + uppercase + numbers + symbols;
+        
+     
+        const passwordLength = 16;
+        let generatedPassword = '';
+        
+     
+        const requiredChars = [
+            lowercase[Math.floor(Math.random() * lowercase.length)],
+            uppercase[Math.floor(Math.random() * uppercase.length)],
+            numbers[Math.floor(Math.random() * numbers.length)],
+            symbols[Math.floor(Math.random() * symbols.length)]
+        ];
+        
+   
+        for (let i = requiredChars.length; i < passwordLength; i++) {
+            requiredChars.push(allCharacters[Math.floor(Math.random() * allCharacters.length)]);
+        }
+        
+       
+        for (let i = requiredChars.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [requiredChars[i], requiredChars[j]] = [requiredChars[j], requiredChars[i]];
+        }
+        
+        password = requiredChars.join('');
+        
+     
+        setTimeout(() => {
+            isGeneratingPassword = false;
+        }, 300);
+    }
+
     async function updateEmail(){
  
         const response = await fetch(`${apiBase}/user/email`, {
@@ -106,6 +152,14 @@
         newEmail = "";
         profile();
         return user.email
+    }
+
+    let credentialPWlength = $state("");
+
+    async function generatePassword(){
+
+  
+
     }
 
     let b64_OldSalt;
@@ -961,7 +1015,7 @@ title = "";
                     placeholder="vault_name" 
                     bind:value={vaultName} 
                 />
-                <button class="add-vault-btn" onclick={addVault}>
+                <button class="add-vault-btn" onclick={addVault} disabled={vaultName == ""}>
                     <span>CREATE</span>
                 </button>
             </div>
@@ -998,17 +1052,43 @@ title = "";
                                 class="sidebar-input" 
                                 bind:value={username} 
                             />
-                            <input 
-                                placeholder="password" 
-                                type="password"
-                                class="sidebar-input" 
-                                bind:value={password} 
-                            />
-                            <input 
-                                placeholder="website_url (optional)" 
-                                class="sidebar-input" 
-                                bind:value={url} 
-                            />
+                            <div class="password-input-section">
+                                <input 
+                                    placeholder="password" 
+                                    type={showPasswordInForm ? 'text' : 'password'}
+                                    class="sidebar-input" 
+                                    bind:value={password} 
+                                />
+                                <div class="password-buttons">
+                                    <button 
+                                        class="generate-password-btn" 
+                                        onclick={generateSecurePassword}
+                                        disabled={isGeneratingPassword}
+                                        title="Generate secure password"
+                                    >
+                                        <span class="generate-icon">{isGeneratingPassword ? '⏳' : '🎲'}</span>
+                                        <span class="button-text">GENERATE</span>
+                                    </button>
+                                    <button 
+                                        class="toggle-password-btn" 
+                                        onclick={() => showPasswordInForm = !showPasswordInForm}
+                                        title={showPasswordInForm ? 'Hide password' : 'Show password'}
+                                    >
+                                        <span class="toggle-icon">{showPasswordInForm ? '🙈' : '👁️'}</span>
+                                        <span class="button-text">{showPasswordInForm ? 'HIDE' : 'SHOW'}</span>
+                                    </button>
+                                    <button 
+                                        class="copy-password-btn" 
+                                        onclick={() => copyToClipboard(password, 'Password')}
+                                        disabled={!password}
+                                        title="Copy password to clipboard"
+                                    >
+                                        <span class="copy-icon">📋</span>
+                                        <span class="button-text">COPY</span>
+                                    </button>
+                                </div>
+                            </div>
+                     
                             <textarea 
                                 placeholder="additional_notes (optional)" 
                                 class="sidebar-textarea" 
@@ -1018,7 +1098,7 @@ title = "";
                             <button 
                                 class="sidebar-add-btn" 
                                 class:disabled={!selectedVaultId}
-                                disabled={!selectedVaultId}
+                                disabled={!selectedVaultId || title == ""} 
                                 onclick={() => selectedVaultId && addSecret("credential")}
                             >>
                                 <span>ENCRYPT & STORE</span>
@@ -1039,7 +1119,7 @@ title = "";
                             <button 
                                 class="sidebar-add-btn" 
                                 class:disabled={!selectedVaultId}
-                                disabled={!selectedVaultId}
+                                disabled={!selectedVaultId || title == ""}
                                 onclick={() => selectedVaultId && addSecret("note")}
                             >>
                                 <span>ENCRYPT & STORE</span>
@@ -1080,7 +1160,7 @@ title = "";
                             <button 
                                 class="sidebar-add-btn" 
                                 class:disabled={!selectedVaultId}
-                                disabled={!selectedVaultId}
+                                disabled={!selectedVaultId || title == ""}
                                 onclick={() => selectedVaultId && addSecret("document")}
                             >
                                 <span>ENCRYPT & STORE</span>
@@ -3957,5 +4037,125 @@ title = "";
     transform: none !important;
     box-shadow: none !important;
     opacity: 0.6;
+}
+
+/* Password Input Section Styles */
+.password-input-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.password-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+}
+
+.generate-password-btn,
+.toggle-password-btn,
+.copy-password-btn {
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    text-transform: uppercase;
+    min-height: 32px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.generate-password-btn {
+    background: rgba(0, 170, 255, 0.1);
+    border: 1px solid #00aaff;
+    color: #00aaff;
+}
+
+.generate-password-btn:hover:not(:disabled) {
+    background: rgba(0, 170, 255, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0, 170, 255, 0.3);
+}
+
+.generate-password-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.toggle-password-btn {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid #ffc107;
+    color: #ffc107;
+}
+
+.toggle-password-btn:hover {
+    background: rgba(255, 193, 7, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(255, 193, 7, 0.3);
+}
+
+.copy-password-btn {
+    background: rgba(0, 255, 65, 0.1);
+    border: 1px solid #00ff41;
+    color: #00ff41;
+}
+
+.copy-password-btn:hover:not(:disabled) {
+    background: rgba(0, 255, 65, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0, 255, 65, 0.3);
+}
+
+.copy-password-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.generate-icon,
+.toggle-icon,
+.copy-icon {
+    font-size: 0.9rem;
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
+}
+
+.button-text {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.generate-password-btn:hover:not(:disabled) .generate-icon {
+    transform: rotate(180deg);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .password-buttons {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .generate-password-btn,
+    .toggle-password-btn,
+    .copy-password-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 10px 16px;
+    }
+    
+    .button-text {
+        font-size: 0.8rem;
+    }
 }
 </style>
