@@ -11,7 +11,7 @@
     let userData;
     let mfaCode = $state("");
     let showMFA = $state(false);
-
+    let showReCaptcha_v2 = $state(false);
       onMount(() => {
     const script = document.createElement("script");
     script.src = "https://www.google.com/recaptcha/api.js?render=6Lf8kdkrAAAAAAfwdEZ3YRQA-SgMSutBnEXTTb3e";
@@ -54,10 +54,21 @@
     let password = "";
     let result = $state("");
 
+    let v2token;
 
     async function login(){
 
-    const token = await window.grecaptcha.execute("6Lf8kdkrAAAAAAfwdEZ3YRQA-SgMSutBnEXTTb3e", { action: "login"});
+    // @ts-ignore
+    const v3token = await window.grecaptcha.execute("6Lf8kdkrAAAAAAfwdEZ3YRQA-SgMSutBnEXTTb3e", { action: "login"});
+
+    if (showReCaptcha_v2){
+
+     v2token = window.grecaptcha.getResponse() || null;
+
+
+    }
+
+
 
     const response = await fetch( `${apiBase}/auth/login`, {
         method: 'POST',
@@ -65,7 +76,7 @@
             'Content-Type': 'application/json',
             'accept': "application/json"
         },
-        body: JSON.stringify({ email, password, recaptcha_token: token })
+        body: JSON.stringify({ email, password, recaptcha_token: v3token, recaptcha_token_v2: v2token})
     });
 
     const data = await response.json();
@@ -73,9 +84,20 @@
     if (!response.ok){
 
         result = data.detail;
+
+         
+    if (data.detail == "Please solve reCAPTCHA checkbox"){
+
+        showReCaptcha_v2 = true;
+        console.log("v2 required");
+  
+    }
+
         throw new Error("Failed");
         return;
     }
+
+   
 
     if (data.mfa_required){
 
@@ -90,6 +112,14 @@
 
     
 }
+
+
+// @ts-ignore
+window.onRecaptchaSuccess = function (token) {
+  console.log("v2 solved, token:", token);
+  // Option 1: direkt login() nochmal triggern
+  login();
+};
 
 
 </script>
@@ -148,6 +178,17 @@
                     />
                 </div>
                 
+                {#if showReCaptcha_v2}
+                  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+
+                    <div class="recaptcha-widget-container">
+                        <div 
+                            class="g-recaptcha"
+                            data-sitekey="6Let2dkrAAAAAOIyWGyaDiN0lfPEEaiP08fP4A2W"
+                            data-callback="onRecaptchaSuccess">
+                        </div>
+                    </div>
+                {/if}
 
                 <button  type="submit" class="submit-btn">
                     <span class="btn-text">./authenticate.sh</span>
@@ -356,6 +397,18 @@
 
     .input::placeholder {
         color: #666;
+    }
+
+    /* reCAPTCHA widget styling inside form */
+    .recaptcha-widget-container {
+        display: flex;
+        justify-content: center;
+        margin: 20px 0;
+        padding: 15px;
+        background: rgba(255, 149, 0, 0.05);
+        border: 1px solid rgba(255, 149, 0, 0.2);
+        border-radius: 8px;
+        animation: slideIn 0.3s ease-out;
     }
 
     .submit-btn {

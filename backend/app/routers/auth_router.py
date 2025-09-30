@@ -8,7 +8,7 @@ from app.models import user_model
 from datetime import datetime
 from app.twofa import verifiy_totp
 from typing import Union
-from app.recaptcha import verify_recaptcha
+from app.recaptcha import verify_recaptchav3, verify_recaptchav2
 import requests
 
 router = APIRouter(
@@ -19,11 +19,19 @@ router = APIRouter(
 @router.post("/login", response_model=Union[auth_schema.AuthResponse, auth_schema.PreAuth])
 async def login(session: PgAsyncSession, credentials: auth_schema.Credentials, request: Request):
     client_ip = request.client.host
-    if not verify_recaptcha(credentials.recaptcha_token, action="login", remote_ip=client_ip):
-        raise HTTPException(status_code=404, detail="Captcha failed")
+    score = await verify_recaptchav3(token=credentials.recaptcha_token, action="login", remote_ip=client_ip)
+
+
+    if score < 0.5:
+        if not credentials.recaptcha_token_v2:
+            raise HTTPException(status_code=403, detail="Please solve reCAPTCHA checkbox")
+        if not await verify_recaptchav2(token=credentials.recaptcha_token_v2, remote_ip=client_ip):
+            raise HTTPException(status_code=403, detail="Captcha error")
+
+    
     email = credentials.email
     password = credentials.password
-    stmt = select(user_model.User).where(email == user_model.User.email)
+    stmt = select(user_model.User).where(user_model.User.email == email)
     result = await session.execute(stmt)
     user = result.scalars().first()
     if not user:

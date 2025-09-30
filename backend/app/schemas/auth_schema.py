@@ -11,6 +11,7 @@ class Credentials(BaseModel):
     email: str
     password: str
     recaptcha_token: str
+    recaptcha_token_v2: str = None
 
 class PreAuth(BaseModel):
     mfa_required: bool = True
