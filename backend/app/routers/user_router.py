@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from app.models import user_model
-from app.auth import hash_password, get_current_user, verify_password
+from app.auth import hash_password, get_current_user, verify_password, check_pwned_password
 from app.database import PgAsyncSession
 from app.schemas import user_schema
 
@@ -20,6 +20,9 @@ async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSessi
     existing_user = result.scalars().first()
     if existing_user:
         raise HTTPException(status_code=400, detail=f"The email {user_create.email} is not available")
+
+    if check_pwned_password(user_create.password):
+        raise HTTPException(status_code=400, detail="Your password is compromised, please choose a different password")
     
     db_user = user_model.User(
         email=user_create.email,

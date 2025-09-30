@@ -11,8 +11,8 @@ from app.database import get_db
 from app.models import user_model
 from sqlalchemy import select
 import time
-
-
+import hashlib
+import requests
 
 load_dotenv()
 
@@ -78,3 +78,25 @@ def verify_preauth_token(preauth_token):
     
     return int(payload.get("sub"))
     
+
+
+def check_pwned_password(password: str):
+    hashed_password = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
+
+    prefix = hashed_password[:5]
+    suffix = hashed_password[5:]
+
+    response = requests.get(f"https://api.pwnedpasswords.com/range/{prefix}")
+    if response.status_code != 200:
+        raise RuntimeError("Error fetching data from pwned API")
+
+    hashes = (line.split(":") for line in response.text.splitlines())
+
+    for hash_suffix, count in hashes:
+        if hash_suffix == suffix:
+            return True
+
+
+    return False
+
+
