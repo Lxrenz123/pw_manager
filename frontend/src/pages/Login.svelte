@@ -4,12 +4,21 @@
     import { deriveKey } from "../script/crypto.js";
     import { userKey } from "../stores/user-key.js";
     import { loginCrypto } from "../script/crypto.js";
+    import { onMount } from "svelte";
 
-
+    
     let preauth_token;
     let userData;
     let mfaCode = $state("");
     let showMFA = $state(false);
+
+      onMount(() => {
+    const script = document.createElement("script");
+    script.src = "https://www.google.com/recaptcha/api.js?render=6Lf8kdkrAAAAAAfwdEZ3YRQA-SgMSutBnEXTTb3e";
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  });
 
     async function verify2FA(){
         result = "";
@@ -47,13 +56,16 @@
 
 
     async function login(){
+
+    const token = await window.grecaptcha.execute("6Lf8kdkrAAAAAAfwdEZ3YRQA-SgMSutBnEXTTb3e", { action: "login"});
+
     const response = await fetch( `${apiBase}/auth/login`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'accept': "application/json"
         },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password, recaptcha_token: token })
     });
 
     const data = await response.json();
@@ -137,7 +149,7 @@
                 </div>
                 
 
-                <button type="submit" class="submit-btn">
+                <button  type="submit" class="submit-btn">
                     <span class="btn-text">./authenticate.sh</span>
                     <span class="btn-arrow">→</span>
                 </button>

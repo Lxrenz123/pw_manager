@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from app.schemas import user_schema, auth_schema, mfa_schema
 from app.auth import verify_password, create_access_token, create_preauth_token, verify_preauth_token
 from app.database import PgAsyncSession
@@ -8,6 +8,8 @@ from app.models import user_model
 from datetime import datetime
 from app.twofa import verifiy_totp
 from typing import Union
+from app.recaptcha import verify_recaptcha
+import requests
 
 router = APIRouter(
     prefix="/auth",
@@ -15,7 +17,10 @@ router = APIRouter(
 )
 
 @router.post("/login", response_model=Union[auth_schema.AuthResponse, auth_schema.PreAuth])
-async def login(session: PgAsyncSession, credentials: auth_schema.Credentials):
+async def login(session: PgAsyncSession, credentials: auth_schema.Credentials, request: Request):
+    client_ip = request.client.host
+    if not verify_recaptcha(credentials.recaptcha_token, action="login", remote_ip=client_ip):
+        raise HTTPException(status_code=404, detail="Captcha failed")
     email = credentials.email
     password = credentials.password
     stmt = select(user_model.User).where(email == user_model.User.email)

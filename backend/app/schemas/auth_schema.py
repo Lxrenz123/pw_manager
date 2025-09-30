@@ -10,6 +10,7 @@ class AuthResponse(BaseModel):
 class Credentials(BaseModel):
     email: str
     password: str
+    recaptcha_token: str
 
 class PreAuth(BaseModel):
     mfa_required: bool = True
