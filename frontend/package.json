@@ -16,6 +16,7 @@
     "vite-plugin-wasm": "^3.5.0"
   },
   "dependencies": {
+    "openpgp": "^6.2.2",
     "svelte-routing": "^2.13.0"
   }
 }

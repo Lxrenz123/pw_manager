@@ -6,7 +6,7 @@
     let password = "";
     let confirmPassword = "";
     let user_key;
-    let result = "";
+    let result = $state("");
     let isSuccess = false;
 
 

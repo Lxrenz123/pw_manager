@@ -6,10 +6,16 @@
     import { get } from "svelte/store";
     import { navigate } from "svelte-routing";
     import { deriveKey } from "../script/crypto";
+    import { nonpassive } from "svelte/legacy";
+    import * as openpgp from "openpgp";
 
     let newNote = $state({});
     let newCredential = $state({});
     let newDocument = $state({});
+
+    let errorstatePW = $state("");
+
+    let errorstateEM = $state("");
 
     let userId = $state("");
     let userEmail = $state("");
@@ -59,6 +65,17 @@
     
     let isGeneratingPassword = $state(false);
     let showPasswordInForm = $state(false);
+    
+    // Email validation function
+    function isValidEmail(email) {
+        const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+        return emailRegex.test(email) && email.length <= 254;
+    }
+    
+    let showExportModal = $state(false);
+    let exportPassphrase = $state("");
+    let confirmExportPassphrase = $state("");
+    let isExporting = $state(false);
 
     async function disable2FA(){
 
@@ -125,33 +142,66 @@
     }
 
     async function updateEmail(){
- 
-        const response = await fetch(`${apiBase}/user/email`, {
-        method: "PATCH",
-        headers: {
-        'Content-Type': 'application/json',
-        'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
-        },
-        body: JSON.stringify({"email": newEmail})
-    });
-
-        if (!response.ok){
-            throw new Error("Error");
+        errorstateEM = "";
+        
+    
+        if (!newEmail || newEmail.trim() === "") {
+            errorstateEM = "Please enter an email address";
             return;
         }
+        
 
-        user = await response.json();
+        const trimmedEmail = newEmail.trim().toLowerCase();
+        
+    
+        if (trimmedEmail === userEmail.toLowerCase()) {
+            errorstateEM = "New email must be different from current email";
+            return;
+        }
+        
 
-        emailUpdateSuccess = "Email updated successfully!";
+        if (!isValidEmail(trimmedEmail)) {
+            errorstateEM = "Please enter a valid email address";
+            return;
+        }
+        
 
-        setTimeout(() => {
-            emailUpdateSuccess = ""
-        }, 3000);
+        if (trimmedEmail.length > 254) {
+            errorstateEM = "Email address is too long (maximum 254 characters)";
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${apiBase}/user/email`, {
+            method: "PATCH",
+            headers: {
+            'Content-Type': 'application/json',
+            'accept': "application/json",
+            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+            },
+            body: JSON.stringify({"email": trimmedEmail})
+        });
 
-        newEmail = "";
-        profile();
-        return user.email
+            user = await response.json();
+
+            if (!response.ok){
+                errorstateEM = user.detail || "Failed to update email";
+                return;
+            }
+
+            emailUpdateSuccess = "Email updated successfully!";
+
+            setTimeout(() => {
+                emailUpdateSuccess = ""
+            }, 3000);
+
+            newEmail = "";
+            profile();
+            return user.email;
+        } catch (error) {
+            console.error("Error updating email:", error);
+            errorstateEM = "An unexpected error occurred while updating email";
+        }
     }
 
     let credentialPWlength = $state("");
@@ -166,6 +216,11 @@
 
     async function updatePassword(){
 
+        if (currentPW != ""){
+            errorstateEM = "Please input your master password"
+            return;
+        }
+        errorstatePW = "";
         const response = await fetch(`${apiBase}/user/salt`, {
         method: "GET",
         headers: {
@@ -175,11 +230,14 @@
         },
     });
 
+        const data = await response.json();
+
         if (!response.ok){
-            throw new Error("Error");
+            errorstatePW = data.detail;
+            return;
         }
 
-        b64_OldSalt = await response.json()
+        b64_OldSalt = data
 
         const bytesOldSalt = Uint8Array.from(atob(b64_OldSalt), c => c.charCodeAt(0));
         
@@ -196,9 +254,6 @@
         );
 
 
-
-        
-
         const response1 = await fetch(`${apiBase}/user/password`, {
         method: "PATCH",
         headers: {
@@ -212,8 +267,9 @@
     });
 
         if (!response1.ok){
-            throw new Error("Error");
-
+            const errorData = await response1.json();
+            errorstatePW = errorData.detail || "Failed to update password";
+            return;
         }
 
         passwordUpdateSuccess = "Successfully updated your master password!"
@@ -240,6 +296,16 @@
     }
 
     async function profile(){
+    
+        const userKeyValue = get(userKey);
+        if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
+            console.error("Invalid or missing user key when accessing profile, redirecting to login");
+            localStorage.removeItem("access_token");
+            userKey.set(null);
+            navigate("/login");
+            return;
+        }
+
         showProfile = true;
 
         const response = await fetch(`${apiBase}/user/me`, {
@@ -419,7 +485,9 @@ function cancelEditSecret() {
 
         const userKeyValue = get(userKey);
         if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
+            console.error("Invalid or missing user key in updateSecret, redirecting to login");
             localStorage.removeItem("access_token");
+            userKey.set(null);
             navigate("/login");
             return;
         }
@@ -481,6 +549,24 @@ function cancelEditSecret() {
 
     } catch (error) {
         console.error("Error updating secret:", error);
+        
+        // Handle crypto-related errors that might indicate session issues
+        if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
+            console.error("CryptoKey validation failed in updateSecret, clearing session");
+            localStorage.removeItem("access_token");
+            userKey.set(null);
+            navigate("/login");
+            return;
+        }
+        
+        if (error.name === 'OperationError' || error.name === 'InvalidAccessError') {
+            console.error("Crypto operation failed in updateSecret, likely due to invalid session");
+            localStorage.removeItem("access_token");
+            userKey.set(null);
+            navigate("/login");
+            return;
+        }
+        
         alert("Failed to update secret. Please try again.");
     } finally {
         isEditingSecret = false;
@@ -523,25 +609,286 @@ function cancelEditSecret() {
         confirmMasterPW = "";
     }
 
-    async function secretsExport(){
+    function openExportModal() {
+        showExportModal = true;
+        exportPassphrase = "";
+        confirmExportPassphrase = "";
+    }
 
-        const response = await fetch(`${apiBase}/secret`, {
-        method: "GET",
-        headers: {
-        'Content-Type': 'application/json',
-        'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
-        }});
+    function cancelExport() {
+        showExportModal = false;
+        exportPassphrase = "";
+        confirmExportPassphrase = "";
+    }
 
-        if (!response.ok){
-            throw new Error("Error");
+    async function secretsExport() {
+        if (exportPassphrase !== confirmExportPassphrase) {
+            alert("Passphrases do not match!");
             return;
         }
 
-        const secrets = await response.json();
+        if (exportPassphrase.length < 8) {
+            alert("Passphrase must be at least 8 characters long!");
+            return;
+        }
 
+        try {
+            isExporting = true;
 
+            // Validate userKey before export
+            const userKeyValue = get(userKey);
+            if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
+                console.error("Invalid or missing user key for export, redirecting to login");
+                localStorage.removeItem("access_token");
+                userKey.set(null);
+                navigate("/login");
+                return;
+            }
 
+            // Fetch all secrets from backend (these are still encrypted)
+            const response = await fetch(`${apiBase}/secret`, {
+                method: "GET",
+                headers: {
+                    'Content-Type': 'application/json',
+                    'accept': "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error("Failed to fetch secrets");
+            }
+
+            const encryptedSecrets = await response.json();
+
+            console.log("Fetched encrypted secrets:", encryptedSecrets.length);
+
+            // Decrypt all secrets to get plaintext data
+            const decryptedSecrets = await Promise.all(encryptedSecrets.map(async (secret) => {
+                try {
+                    // Decrypt the secret key
+                    const encSecretKeyBytes = Uint8Array.from(atob(secret.encrypted_secret_key), c => c.charCodeAt(0));
+                    const ivKey = Uint8Array.from(atob(secret.secret_key_iv), c => c.charCodeAt(0));
+
+                    const secretKeyBytes = await crypto.subtle.decrypt(
+                        { name: "AES-GCM", iv: ivKey },
+                        userKeyValue,
+                        encSecretKeyBytes
+                    );
+
+                    const secretKey = await crypto.subtle.importKey(
+                        "raw",
+                        secretKeyBytes,
+                        { name: "AES-GCM" },
+                        false,
+                        ["encrypt", "decrypt"]
+                    );
+
+                    // Decrypt the actual secret data
+                    const ivData = Uint8Array.from(atob(secret.secret_iv), c => c.charCodeAt(0));
+                    const encryptedData = Uint8Array.from(atob(secret.data_encrypted), c => c.charCodeAt(0));
+
+                    const decryptedData = await crypto.subtle.decrypt(
+                        { name: "AES-GCM", iv: ivData },
+                        secretKey,
+                        encryptedData
+                    );
+
+                    const decoder = new TextDecoder();
+                    const plaintext = decoder.decode(decryptedData);
+
+                    // Return secret with decrypted data and metadata
+                    return {
+                        id: secret.id,
+                        vault_id: secret.vault_id,
+                        secret_type: secret.secret_type,
+                        created_at: secret.created_at,
+                        updated_at: secret.updated_at,
+                        data: JSON.parse(plaintext) // This is now plaintext data
+                    };
+
+                } catch (err) {
+                    console.error("Failed to decrypt secret:", secret.id, err);
+                    // Include failed secrets with error info
+                    return {
+                        id: secret.id,
+                        vault_id: secret.vault_id,
+                        secret_type: secret.secret_type,
+                        created_at: secret.created_at,
+                        updated_at: secret.updated_at,
+                        data: { error: "Decryption failed", original_error: err.message }
+                    };
+                }
+            }));
+
+            console.log("Decrypted secrets:", decryptedSecrets.length);
+
+            // Filter out document secrets to exclude files from export
+            const exportableSecrets = decryptedSecrets.filter(secret => secret.secret_type !== 'document');
+            const excludedCount = decryptedSecrets.length - exportableSecrets.length;
+
+            console.log("Exportable secrets (excluding documents):", exportableSecrets.length);
+            if (excludedCount > 0) {
+                console.log("Excluded document secrets:", excludedCount);
+            }
+
+            // Create export data structure with plaintext secrets
+            const exportData = {
+                export_timestamp: new Date().toISOString(),
+                export_type: "pgp_encrypted_backup",
+                app_name: "Password123",
+                version: "1.0",
+                user_note: "This backup contains your decrypted vault secrets. Keep it secure!",
+                total_secrets: exportableSecrets.length,
+                excluded_documents: excludedCount,
+                secrets: exportableSecrets
+            };
+
+            // Convert to a more readable format
+            let readableData = `=== PASSWORD123 VAULT BACKUP ===
+Export Date: ${exportData.export_timestamp}
+Total Secrets: ${exportData.total_secrets}
+Excluded Documents: ${exportData.excluded_documents}
+App Version: ${exportData.version}
+
+IMPORTANT: This file contains your decrypted passwords and sensitive data.
+Keep it secure and delete it when no longer needed.
+
+NOTE: Document/file secrets have been excluded from this export for security and size reasons.
+
+=== VAULT CONTENTS ===
+
+`;
+
+            // Add each secret in a readable format
+            exportableSecrets.forEach((secret, index) => {
+                readableData += `--- Secret ${index + 1} ---\n`;
+                readableData += `ID: ${secret.id}\n`;
+                readableData += `Type: ${secret.secret_type}\n`;
+                readableData += `Vault ID: ${secret.vault_id}\n`;
+                readableData += `Created: ${secret.created_at}\n`;
+                readableData += `Updated: ${secret.updated_at}\n`;
+                
+                if (secret.data.error) {
+                    readableData += `ERROR: ${secret.data.error}\n`;
+                } else {
+                    readableData += `Title: ${secret.data.title || 'N/A'}\n`;
+                    
+                    if (secret.secret_type === 'credential') {
+                        readableData += `Username: ${secret.data.username || 'N/A'}\n`;
+                        readableData += `Password: ${secret.data.password || 'N/A'}\n`;
+                        readableData += `URL: ${secret.data.url || 'N/A'}\n`;
+                        readableData += `Notes: ${secret.data.note || 'N/A'}\n`;
+                    } else if (secret.secret_type === 'note') {
+                        readableData += `Content: ${secret.data.content || 'N/A'}\n`;
+                    }
+                }
+                readableData += `\n`;
+            });
+
+            // Also include JSON format at the end for programmatic access
+            readableData += `\n=== RAW JSON DATA (for programmatic access) ===\n`;
+            readableData += JSON.stringify(exportData, null, 2);
+
+            console.log("Human-readable data prepared:", readableData.length, "characters");
+            console.log("First 500 characters:", readableData.substring(0, 500));
+
+            // Encrypt with proper OpenPGP
+            const encryptedData = await encryptWithPassphrase(readableData, exportPassphrase);
+
+            console.log("Encrypted data:", typeof encryptedData, encryptedData.length);
+
+            // Create and download the PGP file
+            await createAndDownloadZip(encryptedData);
+
+            // Close modal and reset state
+            showExportModal = false;
+            exportPassphrase = "";
+            confirmExportPassphrase = "";
+
+        } catch (error) {
+            console.error("Export failed:", error);
+            
+            // Handle crypto-related errors that might indicate session issues
+            if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
+                console.error("CryptoKey validation failed in export, clearing session");
+                localStorage.removeItem("access_token");
+                userKey.set(null);
+                navigate("/login");
+                return;
+            }
+            
+            if (error.name === 'OperationError' || error.name === 'InvalidAccessError') {
+                console.error("Crypto operation failed in export, likely due to invalid session");
+                localStorage.removeItem("access_token");
+                userKey.set(null);
+                navigate("/login");
+                return;
+            }
+            
+            alert("Export failed: " + error.message);
+        } finally {
+            isExporting = false;
+        }
+    }
+
+    async function encryptWithPassphrase(data, passphrase) {
+        try {
+            console.log("Starting OpenPGP encryption...");
+            
+            // Use OpenPGP.js for proper PGP encryption
+            const message = await openpgp.createMessage({ text: data });
+            console.log("Message created:", message);
+            
+            const encrypted = await openpgp.encrypt({
+                message,
+                passwords: [passphrase], // encrypt with password
+                format: 'armored' // ASCII armor format
+            });
+            
+            console.log("Encryption completed, result type:", typeof encrypted);
+            console.log("Encrypted data preview:", encrypted.substring(0, 100));
+            
+            return encrypted;
+        } catch (error) {
+            console.error('OpenPGP encryption failed:', error);
+            throw new Error('Failed to encrypt data with OpenPGP: ' + error.message);
+        }
+    }
+
+    async function createAndDownloadZip(encryptedData) {
+        try {
+            console.log("Creating download for encrypted data:", typeof encryptedData);
+            
+            // Ensure we have valid encrypted data
+            if (!encryptedData || typeof encryptedData !== 'string') {
+                throw new Error('Invalid encrypted data format');
+            }
+            
+            // Create a proper PGP file
+            const timestamp = new Date();
+            
+            // Create a blob with the armored PGP data
+            const blob = new Blob([encryptedData], { type: 'text/plain' });
+            
+            console.log("Blob created, size:", blob.size);
+            
+            // Download as .pgp file (now properly formatted)
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `password123_backup_${timestamp.toISOString().split('T')[0]}.pgp`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            console.log("Download initiated successfully");
+        } catch (error) {
+            console.error('Download creation failed:', error);
+            throw new Error('Failed to create download: ' + error.message);
+        }
     }
 
 
@@ -747,6 +1094,15 @@ async function getSecretsOfVault(vaultId){
             
           const userKeyValue = get(userKey);
           
+          // Validate userKey before attempting decryption
+          if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
+              console.error("Invalid or missing user key, redirecting to login");
+              localStorage.removeItem("access_token");
+              userKey.set(null);
+              navigate("/login");
+              return { ...secret, data: null };
+          }
+          
             const secretKeyBytes = await crypto.subtle.decrypt(
                 { name: "AES-GCM", iv: ivKey },
                 userKeyValue,
@@ -779,8 +1135,26 @@ async function getSecretsOfVault(vaultId){
         } catch (err) {
             
             console.error("Decrypt failed for secret:", err);
-            localStorage.removeItem("access_token");
-            navigate("/login");
+            
+            // Handle specific crypto errors that indicate session/key issues
+            if (err.name === 'TypeError' && err.message.includes('CryptoKey')) {
+                console.error("CryptoKey validation failed, clearing session");
+                localStorage.removeItem("access_token");
+                userKey.set(null);
+                navigate("/login");
+                return { ...secret, data: null };
+            }
+            
+            // Handle other crypto-related errors that might indicate session issues
+            if (err.name === 'OperationError' || err.name === 'InvalidAccessError') {
+                console.error("Crypto operation failed, likely due to invalid session");
+                localStorage.removeItem("access_token");
+                userKey.set(null);
+                navigate("/login");
+                return { ...secret, data: null };
+            }
+            
+            // For other errors, just log and return null data
             return { ...secret, data: null };
 
         }
@@ -874,8 +1248,11 @@ async function addSecret(secret_type){
 
             const userKeyValue = get(userKey);
         if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
+            console.error("Invalid or missing user key in addSecret, redirecting to login");
             localStorage.removeItem("access_token");
-            navigate("/login")
+            userKey.set(null);
+            navigate("/login");
+            return;
         }
 
     const secretKeyIv = crypto.getRandomValues(new Uint8Array(12));
@@ -955,6 +1332,24 @@ title = "";
     
     } catch (error) {
         console.error("Error in addSecret:", error);
+        
+        // Handle crypto-related errors that might indicate session issues
+        if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
+            console.error("CryptoKey validation failed in addSecret, clearing session");
+            localStorage.removeItem("access_token");
+            userKey.set(null);
+            navigate("/login");
+            return;
+        }
+        
+        if (error.name === 'OperationError' || error.name === 'InvalidAccessError') {
+            console.error("Crypto operation failed in addSecret, likely due to invalid session");
+            localStorage.removeItem("access_token");
+            userKey.set(null);
+            navigate("/login");
+            return;
+        }
+        
         alert("Error adding secret: " + error.message);
     } finally {
         addSecret._running = false;
@@ -1073,6 +1468,7 @@ title = "";
                                         class="toggle-password-btn" 
                                         onclick={() => showPasswordInForm = !showPasswordInForm}
                                         title={showPasswordInForm ? 'Hide password' : 'Show password'}
+                                        disabled={!password || password.trim() === ""}
                                     >
                                         <span class="toggle-icon">{showPasswordInForm ? '🙈' : '👁️'}</span>
                                         <span class="button-text">{showPasswordInForm ? 'HIDE' : 'SHOW'}</span>
@@ -1088,7 +1484,11 @@ title = "";
                                     </button>
                                 </div>
                             </div>
-                     
+                            <input 
+                                placeholder="website_url (optional)" 
+                                class="sidebar-input" 
+                                bind:value={url} 
+                            />
                             <textarea 
                                 placeholder="additional_notes (optional)" 
                                 class="sidebar-textarea" 
@@ -1232,7 +1632,11 @@ title = "";
 
                         <div class="profile-section">
                             <h3 class="section-header">$ update_email --new</h3>
-                            
+
+
+                        {#if errorstateEM}
+                        <div class="error-message">{errorstateEM}</div>
+                        {/if}
                          {#if emailUpdateSuccess}
                             <div class="success-message">
                                 <span class="success-icon">✓</span>
@@ -1253,12 +1657,29 @@ title = "";
                                 <input 
                                     type="email" 
                                     class="profile-input" 
+                                    class:invalid={newEmail && !isValidEmail(newEmail.trim())}
                                     placeholder="new.email@domain.com"
                                     bind:value={newEmail}
                                 />
+                                {#if newEmail && !isValidEmail(newEmail.trim())}
+                                    <div class="field-error">
+                                        <span class="error-icon">⚠</span>
+                                        <span>Please enter a valid email address</span>
+                                    </div>
+                                {/if}
+                                {#if newEmail && newEmail.trim().toLowerCase() === userEmail.toLowerCase()}
+                                    <div class="error-message">
+                                        <span class="error-icon">⚠</span>
+                                        <span>New email must be different from current email</span>
+                                    </div>
+                                {/if}
                             </div>
                 
-                            <button class="profile-action-btn primary" onclick={updateEmail}>
+                            <button 
+                                class="profile-action-btn primary" 
+                                onclick={updateEmail}
+                                disabled={!newEmail || !isValidEmail(newEmail.trim()) || newEmail.trim().toLowerCase() === userEmail.toLowerCase()}
+                            >
                                 <span>UPDATE EMAIL</span>
                                 <span class="btn-icon">📧</span>
                             </button>
@@ -1272,7 +1693,9 @@ title = "";
                                 <span class="success-text">{passwordUpdateSuccess}</span>
                             </div>
                         {/if}
-                
+                            {#if errorstatePW}
+                                <div class="error-message">{errorstatePW}</div>
+                            {/if}
                             <div class="form-group">
                                 <label class="form-label">current_password:</label>
                                 <input 
@@ -1280,6 +1703,7 @@ title = "";
                                     type="password" 
                                     class="profile-input" 
                                     placeholder="enter current master password"
+                                
                                 />
                             </div>
                             <div class="form-group">
@@ -1300,6 +1724,21 @@ title = "";
                                     placeholder="confirm new master password"
                                 />
                             </div>
+                            
+                            {#if newPW && confirmPW && newPW !== confirmPW}
+                                <div class="error-message">
+                                    <span class="error-icon">⚠</span>
+                                    <span>Passwords do not match</span>
+                                </div>
+                            {/if}
+                            
+                            {#if newPW && newPW.length < 8}
+                                <div class="error-message">
+                                    <span class="error-icon">⚠</span>
+                                    <span>Password must be at least 8 characters long</span>
+                                </div>
+                            {/if}
+                            
                             <button class="profile-action-btn danger" disabled={newPW !== confirmPW || newPW == "" || confirmPW == "" || confirmPW.length < 8 || newPW.length < 8} onclick={updatePassword}>
                                 <span>CHANGE PASSWORD</span>
                                 <span class="btn-icon">🔐</span>
@@ -1314,7 +1753,7 @@ title = "";
                                         <h4>Export Encrypted Data</h4>
                                         <p>Download all your encrypted vault data for backup purposes</p>
                                     </div>
-                                    <button class="profile-action-btn secondary">
+                                    <button class="profile-action-btn secondary" onclick={openExportModal}>
                                         <span>EXPORT DATA</span>
                                         <span class="btn-icon">📤</span>
                                     </button>
@@ -1854,6 +2293,106 @@ title = "";
                                     </button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    <!-- PGP Export Modal -->
+    {#if showExportModal}
+        <div class="modal-overlay" onclick={cancelExport}>
+            <div class="modal-container export-modal" onclick={(e) => e.stopPropagation()}>
+                <div class="modal-header">
+                    <h2 class="modal-title">
+                        <span class="modal-icon">🔐</span>
+                        <span>Export Encrypted Backup</span>
+                    </h2>
+                    <button class="modal-close" onclick={cancelExport}>
+                        ×
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="export-content">
+                        <div class="export-info">
+                            <div class="info-section">
+                                <h3>🛡️ Secure PGP Export</h3>
+                                <p>Your data will be encrypted with a passphrase and downloaded as a .pgp file. This backup contains:</p>
+                                <ul>
+                                    <li>All your encrypted secrets</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="warning-section">
+                                <div class="warning-box">
+                                    <span class="warning-icon">⚠️</span>
+                                    <div class="warning-text">
+                                        <strong>Important:</strong> Choose a strong passphrase. If you lose it, the backup cannot be decrypted!
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="export-form">
+                            <div class="form-group">
+                                <label class="form-label">export_passphrase:</label>
+                                <input 
+                                    type="password" 
+                                    class="profile-input" 
+                                    placeholder="enter a strong passphrase for encryption"
+                                    bind:value={exportPassphrase}
+                                    disabled={isExporting}
+                                />
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">confirm_passphrase:</label>
+                                <input 
+                                    type="password" 
+                                    class="profile-input" 
+                                    placeholder="confirm your passphrase"
+                                    bind:value={confirmExportPassphrase}
+                                    disabled={isExporting}
+                                />
+                            </div>
+                            
+                            {#if exportPassphrase && confirmExportPassphrase && exportPassphrase !== confirmExportPassphrase}
+                                <div class="error-message">
+                                    <span class="error-icon">⚠</span>
+                                    <span>Passphrases do not match</span>
+                                </div>
+                            {/if}
+                            
+                            {#if exportPassphrase && exportPassphrase.length < 8}
+                                <div class="error-message">
+                                    <span class="error-icon">⚠</span>
+                                    <span>Passphrase must be at least 8 characters long</span>
+                                </div>
+                            {/if}
+                        </div>
+                        
+                        <div class="export-actions">
+                            <button 
+                                class="profile-action-btn secondary" 
+                                onclick={cancelExport}
+                                disabled={isExporting}
+                            >
+                                <span>CANCEL</span>
+                            </button>
+                            <button 
+                                class="profile-action-btn primary" 
+                                onclick={secretsExport}
+                                disabled={!exportPassphrase || !confirmExportPassphrase || exportPassphrase !== confirmExportPassphrase || exportPassphrase.length < 8 || isExporting}
+                            >
+                                {#if isExporting}
+                                    <span>🔄 ENCRYPTING...</span>
+                                {:else}
+                                    <span>🔐 EXPORT & DOWNLOAD</span>
+                                {/if}
+                                <span class="btn-icon">📤</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -2617,6 +3156,110 @@ title = "";
         gap: 10px;
         color: #ff6b6b;
         font-size: 0.9rem;
+    }
+
+    /* Export Modal Styles */
+    .export-modal {
+        max-width: 600px;
+        width: 90vw;
+    }
+
+    .export-content {
+        display: flex;
+        flex-direction: column;
+        gap: 25px;
+    }
+
+    .export-info {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .info-section h3 {
+        color: #00ff41;
+        margin: 0 0 10px 0;
+        font-size: 1.1rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .info-section p {
+        color: #ccc;
+        margin: 0 0 15px 0;
+        line-height: 1.4;
+    }
+
+    .info-section ul {
+        color: #aaa;
+        margin: 0;
+        padding-left: 20px;
+    }
+
+    .info-section li {
+        margin-bottom: 5px;
+        line-height: 1.3;
+    }
+
+    .warning-section {
+        margin-top: 15px;
+    }
+
+    .warning-box {
+        background: rgba(255, 193, 7, 0.1);
+        border: 1px solid rgba(255, 193, 7, 0.3);
+        border-radius: 6px;
+        padding: 15px;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .warning-icon {
+        color: #ffc107;
+        font-size: 1.2rem;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    .warning-text {
+        color: #ffc107;
+        line-height: 1.4;
+        font-size: 0.9rem;
+    }
+
+    .warning-text strong {
+        color: #fff;
+        font-weight: 600;
+    }
+
+    .export-form {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 8px;
+        border: 1px solid #333;
+    }
+
+    .export-actions {
+        display: flex;
+        gap: 15px;
+        justify-content: flex-end;
+        padding-top: 20px;
+        border-top: 1px solid #333;
+    }
+
+    .export-actions .profile-action-btn {
+        min-width: 140px;
+        justify-content: center;
+    }
+
+    .error-icon {
+        color: #ff6b6b;
+        font-size: 1rem;
     }
 
     /* Empty State */
@@ -3545,6 +4188,21 @@ title = "";
         box-shadow: 0 0 0 2px rgba(0, 170, 255, 0.3);
     }
 
+    .sidebar-dropdown option {
+        background-color: rgba(0, 0, 0, 0.95);
+        color: #00ff41;
+        padding: 8px 12px;
+        border: none;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .sidebar-dropdown option:hover,
+    .sidebar-dropdown option:checked,
+    .sidebar-dropdown option:focus {
+        background-color: rgba(0, 255, 65, 0.1) !important;
+        color: #00ff41 !important;
+    }
+
     .sidebar-form {
         display: flex;
         flex-direction: column;
@@ -4101,6 +4759,14 @@ title = "";
     transform: translateY(-1px);
     box-shadow: 0 3px 10px rgba(255, 193, 7, 0.3);
 }
+.toggle-password-btn:disabled {
+    background-color: #333 !important;
+    color: #666 !important;
+    border-color: #666 !important;
+    cursor: not-allowed !important;
+    opacity: 0.5 !important;
+}
+
 
 .copy-password-btn {
     background: rgba(0, 255, 65, 0.1);

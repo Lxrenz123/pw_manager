@@ -58,59 +58,73 @@
 
     async function login(){
 
-    // @ts-ignore
-    const v3token = await window.grecaptcha.execute("6Lf8kdkrAAAAAAfwdEZ3YRQA-SgMSutBnEXTTb3e", { action: "login"});
+    try {
+        // @ts-ignore
+        const v3token = await window.grecaptcha.execute("6Lf8kdkrAAAAAAfwdEZ3YRQA-SgMSutBnEXTTb3e", { action: "login"});
 
-    if (showReCaptcha_v2){
+        if (showReCaptcha_v2){
 
-     v2token = window.grecaptcha.getResponse() || null;
-
-
-    }
+         v2token = window.grecaptcha.getResponse() || null;
 
 
+        }
 
-    const response = await fetch( `${apiBase}/auth/login`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'accept': "application/json"
-        },
-        body: JSON.stringify({ email, password, recaptcha_token: v3token, recaptcha_token_v2: v2token})
-    });
 
-    const data = await response.json();
-    
-    if (!response.ok){
 
-        result = data.detail;
+        const response = await fetch( `${apiBase}/auth/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'accept': "application/json"
+            },
+            body: JSON.stringify({ email, password, recaptcha_token: v3token, recaptcha_token_v2: v2token})
+        });
 
-         
-    if (data.detail == "Please solve reCAPTCHA checkbox"){
-
-        showReCaptcha_v2 = true;
-        console.log("v2 required");
-  
-    }
-
-        throw new Error("Failed");
-        return;
-    }
-
-   
-
-    if (data.mfa_required){
-
-        localStorage.setItem("preauth_token", data.preauth_token)
+        const data = await response.json();
         
-        showMFA = true;
-        return {"MFA required: ": data.mfa_required}
+        if (!response.ok){
+
+            // Ensure result is always a string
+            result = typeof data.detail === 'string' ? data.detail : 'Login failed. Please try again.';
+
+             
+        if (data.detail == "Please solve reCAPTCHA checkbox"){
+
+            showReCaptcha_v2 = true;
+            console.log("v2 required");
+      
+        } else if (showReCaptcha_v2) {
+
+            if (window.grecaptcha) {
+                // @ts-ignore
+                window.grecaptcha.reset();
+            }
+        }
+
+            throw new Error("Failed");
+            return;
+        }
+
+       
+
+        if (data.mfa_required){
+
+            localStorage.setItem("preauth_token", data.preauth_token)
+            
+            showMFA = true;
+            return; // Remove the object return that was causing the issue
+        }
+
+
+        return loginCrypto(data, password)
+
+    } catch (error) {
+        // Handle any unexpected errors
+        if (typeof result !== 'string' || result === '') {
+            result = 'An unexpected error occurred. Please try again.';
+        }
+        console.error('Login error:', error);
     }
-
-
-    return loginCrypto(data, password)
-
-    
 }
 
 

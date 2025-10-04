@@ -63,6 +63,13 @@ async def update_email(session: PgAsyncSession, update_data: user_schema.UpdateU
     if not user_to_update:
         raise HTTPException(status_code=404, detail="User not found or not authenticated")
     
+
+    stmt = select(user_model.User).where(user_model.User.email == update_data.email)
+    result = await session.execute(stmt)
+    existing_user = result.scalars().first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail=f"The email {update_data.email} is not available")
+
     if update_data.email not in (None, ""):
         user_to_update.email = update_data.email
 
@@ -87,6 +94,10 @@ async def update_password(session: PgAsyncSession, update_data: user_schema.Upda
     
     if not verify_password(update_data.current_password, user_to_update.password):
         raise HTTPException(status_code=400, detail="Wrong master password")
+
+    if check_pwned_password(update_data.password):
+        raise HTTPException(status_code=400, detail="Your new password is compromised, please choose a different password")
+
     
     if update_data.password not in (None, ""):
         user_to_update.password = hash_password(update_data.password)
