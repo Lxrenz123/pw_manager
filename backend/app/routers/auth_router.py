@@ -10,6 +10,8 @@ from app.twofa import verifiy_totp
 from typing import Union
 from app.recaptcha import verify_recaptchav3, verify_recaptchav2
 import requests
+from app.limiter import limiter
+
 
 router = APIRouter(
     prefix="/auth",
@@ -17,6 +19,7 @@ router = APIRouter(
 )
 
 @router.post("/login", response_model=Union[auth_schema.AuthResponse, auth_schema.PreAuth])
+@limiter.limit("5/minute")
 async def login(session: PgAsyncSession, credentials: auth_schema.Credentials, request: Request):
     client_ip = request.client.host
     score = await verify_recaptchav3(token=credentials.recaptcha_token, action="login", remote_ip=client_ip)

@@ -6,6 +6,8 @@ from app.models import user_model
 from app.auth import hash_password, get_current_user, verify_password, check_pwned_password
 from app.database import PgAsyncSession
 from app.schemas import user_schema
+from app.limiter import limiter
+from fastapi import Request
 
 router = APIRouter(
     prefix="/user",
@@ -14,7 +16,8 @@ router = APIRouter(
 
 
 @router.post("/", response_model=user_schema.UserOut)
-async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSession):
+@limiter.limit("5/minute")
+async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSession, request: Request):
     stmt = select(user_model.User).where(user_model.User.email == user_create.email)
     result = await session.execute(stmt)
     existing_user = result.scalars().first()
@@ -55,7 +58,8 @@ async def get_salt(session: PgAsyncSession, user: user_model.User = Depends(get_
 
 
 @router.patch("/email", response_model=user_schema.UserOut)
-async def update_email(session: PgAsyncSession, update_data: user_schema.UpdateUserEmail, user: user_model.User = Depends(get_current_user)):
+@limiter.limit("5/minute")
+async def update_email(request: Request, session: PgAsyncSession, update_data: user_schema.UpdateUserEmail, user: user_model.User = Depends(get_current_user)):
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user_to_update = result.scalars().first()
@@ -63,6 +67,9 @@ async def update_email(session: PgAsyncSession, update_data: user_schema.UpdateU
     if not user_to_update:
         raise HTTPException(status_code=404, detail="User not found or not authenticated")
     
+
+    if not verify_password(update_data.password, user_to_update.password):
+        raise HTTPException(status_code=400, detail="Wrong master password")
 
     stmt = select(user_model.User).where(user_model.User.email == update_data.email)
     result = await session.execute(stmt)
@@ -85,7 +92,8 @@ async def update_email(session: PgAsyncSession, update_data: user_schema.UpdateU
 
 
 @router.patch("/password")
-async def update_password(session: PgAsyncSession, update_data: user_schema.UpdateUserPassword, user: user_schema.User = Depends(get_current_user)):
+@limiter.limit("5/minute")
+async def update_password(request: Request, session: PgAsyncSession, update_data: user_schema.UpdateUserPassword, user: user_schema.User = Depends(get_current_user)):
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user_to_update = result.scalars().first()

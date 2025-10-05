@@ -52,6 +52,7 @@ class User(BaseModel):
     email: str
 
 class UpdateUserEmail(BaseModel):
+    password: str
     email: str
 
 class UpdateUserPassword(BaseModel):
