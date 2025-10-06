@@ -12,7 +12,7 @@
     let newNote = $state({});
     let newCredential = $state({});
     let newDocument = $state({});
-
+    let emailconfirmPW = $state("");
     let errorstatePW = $state("");
 
     let errorstateEM = $state("");
@@ -179,7 +179,7 @@
             'accept': "application/json",
             "Authorization": `Bearer ${localStorage.getItem("access_token")}`
             },
-            body: JSON.stringify({"email": trimmedEmail})
+            body: JSON.stringify({"email": trimmedEmail, "password": emailconfirmPW})
         });
 
             user = await response.json();
@@ -194,7 +194,7 @@
             setTimeout(() => {
                 emailUpdateSuccess = ""
             }, 3000);
-
+            emailconfirmPW = "";
             newEmail = "";
             profile();
             return user.email;
@@ -1632,7 +1632,7 @@ title = "";
 
                         <div class="profile-section">
                             <h3 class="section-header">$ update_email --new</h3>
-
+                            
 
                         {#if errorstateEM}
                         <div class="error-message">{errorstateEM}</div>
@@ -1643,6 +1643,15 @@ title = "";
                                 <span class="success-text">{emailUpdateSuccess}</span>
                             </div>
                         {/if}
+                            <div class="form-group">
+                                <label class="form-label">current_password:</label>
+                                <input 
+                                    bind:value={emailconfirmPW}
+                                    type="password" 
+                                    class="profile-input" 
+                                    placeholder="enter current master password"
+                                />
+                            </div>
                             <div class="form-group">
                                 <label class="form-label">current_email:</label>
                                 <input 

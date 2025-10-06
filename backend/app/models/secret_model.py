@@ -17,10 +17,10 @@ class Secret(Base):
     type: Mapped[SecretType] = mapped_column(Enum(SecretType), nullable=False)
     data_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
-    encrypted_secret_key: Mapped[str] = mapped_column(String, nullable=True) #nullabletrue später in false ändern nur zum testen
-    secret_key_iv: Mapped[str] = mapped_column(String, nullable=True) #nullabletrue später in false ändern nur zum testen
+    encrypted_secret_key: Mapped[str] = mapped_column(String, nullable=False) 
+    secret_key_iv: Mapped[str] = mapped_column(String, nullable=False)
 
-    secret_iv: Mapped[str] = mapped_column(String, nullable=True) #nullabletrue später in false ändern nur zum testen
+    secret_iv: Mapped[str] = mapped_column(String, nullable=False) 
     vault_id: Mapped[int] = mapped_column(Integer, ForeignKey("vault.id"), nullable=False, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, server_default=func.now(), nullable=False)

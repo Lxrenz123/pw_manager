@@ -12,12 +12,12 @@ class User(Base):
     password: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, server_default=func.now(), nullable=False)
 
-    mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False) #nullabletrue später in false ändern nur zum testen
-    otp_secret: Mapped[str] = mapped_column(String, nullable=True) #nullabletrue später in false ändern nur zum teste
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    otp_secret: Mapped[str] = mapped_column(String, nullable=True, default=None) 
 
     last_login: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, server_default=func.now(), nullable=True)
 
-    user_key: Mapped[str] = mapped_column(String, nullable=True) #nullabletrue später in false ändern nur zum testen
-    salt: Mapped[str] = mapped_column(String, nullable=True) #nullabletrue später in false ändern nur zum testen
-    iv: Mapped[str] = mapped_column(String, nullable=True)
+    user_key: Mapped[str] = mapped_column(String, nullable=False) 
+    salt: Mapped[str] = mapped_column(String, nullable=False) 
+    iv: Mapped[str] = mapped_column(String, nullable=False)
     vault: Mapped[List["Vault"]] = relationship(back_populates="owner", cascade="all, delete-orphan")

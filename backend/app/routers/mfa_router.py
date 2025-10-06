@@ -57,9 +57,7 @@ async def disable_2fa(session: PgAsyncSession, code: mfa_schema.Confirm, user: u
     if not user.mfa_enabled:
         raise HTTPException(status_code=400, detail="2FA is already disabled")
     
-    ok = verifiy_totp(user.otp_secret, code.code)
-
-    if not ok:
+    if not verifiy_totp(user.otp_secret, code.code):
         raise HTTPException(status_code=400, detail="Invalid Code")
     
     user.mfa_enabled = False
