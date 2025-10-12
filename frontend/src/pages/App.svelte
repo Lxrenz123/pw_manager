@@ -11,7 +11,7 @@
 
     let newNote = $state({});
     let newCredential = $state({});
-    let newDocument = $state({});
+    let newCreditCard = $state({});
     let emailconfirmPW = $state("");
     let errorstatePW = $state("");
 
@@ -48,11 +48,14 @@
     let password = $state("");
     let url = $state("");
     let note = $state("");
-    let doc = $state("")
-    let selectedFile = $state(null);
-    let fileName = $state("");
-    let fileSize = $state(0);
-    let fileType = $state("");
+    
+    // Credit card specific fields
+    let cardNumber = $state("");
+    let cardHolder = $state("");
+    let expiryDate = $state("");
+    let cvv = $state("");
+    let bankName = $state("");
+    
     let activeSecretType = $state("credential"); // Track which form is active
     let visiblePasswords = $state(new Set()); // Track which passwords are visible
 
@@ -77,26 +80,52 @@
     let confirmExportPassphrase = $state("");
     let isExporting = $state(false);
 
+    function openDisable2FAModal() {
+        showDisable2FAModal = true;
+        disable2FACode = "";
+        disable2FAError = "";
+    }
+
+    function cancelDisable2FA() {
+        showDisable2FAModal = false;
+        disable2FACode = "";
+        disable2FAError = "";
+    }
+
     async function disable2FA(){
+        disable2FAError = "";
 
-        const response = await fetch(`${apiBase}/2fa/disable`, {
-        method: "POST",
-        headers: {
-        'Content-Type': 'application/json',
-        'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
-        },
-        body: JSON.stringify({"code": mfaCode})
-    });
-
-        if (!response.ok){
-            throw new Error("Error");
+        if (!disable2FACode || disable2FACode.trim() === "") {
+            disable2FAError = "Please enter your 2FA code";
             return;
         }
 
-        user2FA = false
+        try {
+            const response = await fetch(`${apiBase}/2fa/disable`, {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/json',
+                    'accept': "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+                },
+                body: JSON.stringify({"code": disable2FACode})
+            });
 
-        return "Successfully disabled 2FA"
+            if (!response.ok){
+                const errorData = await response.json();
+                disable2FAError = errorData.detail || "Failed to disable 2FA";
+                return;
+            }
+
+            user2FA = false;
+            showDisable2FAModal = false;
+            disable2FACode = "";
+
+            return "Successfully disabled 2FA";
+        } catch (error) {
+            console.error("Error disabling 2FA:", error);
+            disable2FAError = "An unexpected error occurred";
+        }
     }
     function generateSecurePassword() {
         isGeneratingPassword = true;
@@ -362,6 +391,9 @@
     }
     let mfaConfirm = $state("");
     let mfaCode = $state("");
+    let showDisable2FAModal = $state(false);
+    let disable2FACode = $state("");
+    let disable2FAError = $state("");
 
     async function confirm2FA(){
             
@@ -723,14 +755,10 @@ function cancelEditSecret() {
 
             console.log("Decrypted secrets:", decryptedSecrets.length);
 
-            // Filter out document secrets to exclude files from export
-            const exportableSecrets = decryptedSecrets.filter(secret => secret.secret_type !== 'document');
-            const excludedCount = decryptedSecrets.length - exportableSecrets.length;
+            // All secrets are now exportable since we removed document support
+            const exportableSecrets = decryptedSecrets;
 
-            console.log("Exportable secrets (excluding documents):", exportableSecrets.length);
-            if (excludedCount > 0) {
-                console.log("Excluded document secrets:", excludedCount);
-            }
+            console.log("Exportable secrets:", exportableSecrets.length);
 
             // Create export data structure with plaintext secrets
             const exportData = {
@@ -740,7 +768,6 @@ function cancelEditSecret() {
                 version: "1.0",
                 user_note: "This backup contains your decrypted vault secrets. Keep it secure!",
                 total_secrets: exportableSecrets.length,
-                excluded_documents: excludedCount,
                 secrets: exportableSecrets
             };
 
@@ -748,13 +775,10 @@ function cancelEditSecret() {
             let readableData = `=== PASSWORD123 VAULT BACKUP ===
 Export Date: ${exportData.export_timestamp}
 Total Secrets: ${exportData.total_secrets}
-Excluded Documents: ${exportData.excluded_documents}
 App Version: ${exportData.version}
 
 IMPORTANT: This file contains your decrypted passwords and sensitive data.
 Keep it secure and delete it when no longer needed.
-
-NOTE: Document/file secrets have been excluded from this export for security and size reasons.
 
 === VAULT CONTENTS ===
 
@@ -781,6 +805,13 @@ NOTE: Document/file secrets have been excluded from this export for security and
                         readableData += `Notes: ${secret.data.note || 'N/A'}\n`;
                     } else if (secret.secret_type === 'note') {
                         readableData += `Content: ${secret.data.content || 'N/A'}\n`;
+                    } else if (secret.secret_type === 'creditcard') {
+                        readableData += `Cardholder: ${secret.data.cardHolder || 'N/A'}\n`;
+                        readableData += `Card Number: ${secret.data.cardNumber || 'N/A'}\n`;
+                        readableData += `Expiry Date: ${secret.data.expiryDate || 'N/A'}\n`;
+                        readableData += `CVV: ${secret.data.cvv || 'N/A'}\n`;
+                        readableData += `Bank: ${secret.data.bankName || 'N/A'}\n`;
+                        readableData += `Notes: ${secret.data.note || 'N/A'}\n`;
                     }
                 }
                 readableData += `\n`;
@@ -891,85 +922,6 @@ NOTE: Document/file secrets have been excluded from this export for security and
         }
     }
 
-
-    function handleFileUpload(event) {
-        const file = event.target.files[0];
-        if (file) {
-            // File size limit: 10MB
-            const maxSize = 10 * 1024 * 1024; // 10MB in bytes
-            if (file.size > maxSize) {
-                alert("File size must be less than 10MB");
-                event.target.value = "";
-                return;
-            }
-
-            // Allowed file types
-            const allowedTypes = [
-                'application/pdf',
-                'image/jpeg',
-                'image/png',
-                'image/gif',
-                'text/plain',
-                'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-            ];
-
-            if (!allowedTypes.includes(file.type)) {
-                alert("File type not supported. Please upload PDF, images, or text documents.");
-                event.target.value = "";
-                return;
-            }
-
-            selectedFile = file;
-            fileName = file.name;
-            fileSize = file.size;
-            fileType = file.type;
-        }
-    }
-
-    async function fileToBase64(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                // Remove the data URL prefix (data:*/*;base64,)
-                const result = reader.result;
-                if (typeof result === 'string') {
-                    const base64 = result.split(',')[1];
-                    resolve(base64);
-                } else {
-                    reject(new Error('Expected string result from FileReader'));
-                }
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
-    }
-
-    function downloadFile(fileData) {
-        try {
-            // Convert base64 back to blob
-            const byteCharacters = atob(fileData.fileData);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            const blob = new Blob([byteArray], { type: fileData.fileType });
-            
-            // Create download link
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = fileData.fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            alert('Error downloading file: ' + error.message);
-        }
-    }
 
     async function copyToClipboard(text, fieldName) {
         try {
@@ -1186,36 +1138,14 @@ async function addSecret(secret_type){
             title: title,
             content: note
         }
-
-        if (secret_type === "document") {
-            if (!selectedFile) {
-                alert("Please select a file to upload");
-                return;
-            }
-            
-            // Add file size limit (5MB)
-            if (selectedFile.size > 5 * 1024 * 1024) {
-                alert("File too large. Maximum size is 5MB.");
-                return;
-            }
-            
-            try {
-                const fileBase64 = await fileToBase64(selectedFile);
-                newDocument = {
-                    title: title,
-                    fileName: fileName,
-                    fileType: fileType,
-                    fileSize: fileSize,
-                    fileData: fileBase64
-                };
-            } catch (error) {
-                alert("Error reading file: " + error.message);
-                return;
-            }
-        } else {
-            newDocument = {
-                file: doc
-            };
+        newCreditCard = {
+            title: title,
+            cardHolder: cardHolder,
+            cardNumber: cardNumber,
+            expiryDate: expiryDate,
+            cvv: cvv,
+            bankName: bankName,
+            note: note
         }
 
    const secretKeyBytes = crypto.getRandomValues(new Uint8Array(32));
@@ -1231,13 +1161,10 @@ async function addSecret(secret_type){
    if (secret_type == "note"){
         plaintext = encoder.encode(JSON.stringify(newNote));
    } else if (secret_type == "credential"){
-
          plaintext = encoder.encode(JSON.stringify(newCredential));
+   } else if (secret_type == "creditcard"){
+         plaintext = encoder.encode(JSON.stringify(newCreditCard));
    }
-    else if (secret_type == "document"){
-
-         plaintext = encoder.encode(JSON.stringify(newDocument))
-    }
     const secretIv = crypto.getRandomValues(new Uint8Array(12));
 
     const encryptedSecret = await crypto.subtle.encrypt(
@@ -1304,31 +1231,25 @@ async function addSecret(secret_type){
             
 
     const decryptedData = secret_type == "note" ? newNote : 
-                            secret_type == "credential" ? newCredential : newDocument;
+                            secret_type == "credential" ? newCredential : newCreditCard;
     
 
     secrets.push({ ...newSecret, data: decryptedData });
             
 
     // Clear form fields based on secret type
-title = "";
+        title = "";
         note = "";
-
         username = "";
         password = "";
         url = "";
-        note = "";
-
-        doc = "";
-        selectedFile = null;
-        fileName = "";
-        fileSize = 0;
-        fileType = "";
-
-        const fileInput = document.querySelector('input[type="file"]');
-        if (fileInput instanceof HTMLInputElement) fileInput.value = "";
-    
-        title = "";
+        
+        // Credit card fields
+        cardNumber = "";
+        cardHolder = "";
+        expiryDate = "";
+        cvv = "";
+        bankName = "";
     
     } catch (error) {
         console.error("Error in addSecret:", error);
@@ -1430,7 +1351,7 @@ title = "";
                         >
                             <option value="credential">🔑 CREDENTIAL</option>
                             <option value="note">📝 NOTE</option>
-                            <option value="document">📄 DOCUMENT</option>
+                            <option value="creditcard">� CREDIT CARD</option>
                         </select>
                     </div>
 
@@ -1525,43 +1446,54 @@ title = "";
                                 <span>ENCRYPT & STORE</span>
                                 <span class="btn-icon">🔐</span>
                             </button>
-                        {:else if activeSecretType === "document"}
+                        {:else if activeSecretType === "creditcard"}
                             <input 
-                                placeholder="document_title" 
+                                placeholder="card_title" 
                                 class="sidebar-input" 
                                 bind:value={title} 
                             />
-                            <label class="sidebar-file-upload">
+                            <input 
+                                placeholder="cardholder_name" 
+                                class="sidebar-input" 
+                                bind:value={cardHolder} 
+                            />
+                            <input 
+                                placeholder="card_number" 
+                                class="sidebar-input" 
+                                bind:value={cardNumber} 
+                                maxlength="19"
+                            />
+                            <div class="card-details-row">
                                 <input 
-                                    type="file" 
-                                    class="file-input"
-                                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
-                                    onchange={handleFileUpload}
+                                    placeholder="MM/YY" 
+                                    class="sidebar-input small" 
+                                    bind:value={expiryDate}
+                                    maxlength="5"
                                 />
-                                <span class="file-upload-text">
-                                    {#if selectedFile}
-                                        📄 {fileName}
-                                    {:else}
-                                        📎 Upload file
-                                    {/if}
-                                </span>
-                            </label>
-                            {#if selectedFile}
-                                <div class="sidebar-file-info">
-                                    <span class="file-detail">Size: {(fileSize / 1024).toFixed(1)} KB</span>
-                                </div>
-                            {/if}
+                                <input 
+                                    placeholder="CVV" 
+                                    type="password"
+                                    class="sidebar-input small" 
+                                    bind:value={cvv}
+                                    maxlength="4"
+                                />
+                            </div>
+                            <input 
+                                placeholder="bank_name (optional)" 
+                                class="sidebar-input" 
+                                bind:value={bankName} 
+                            />
                             <textarea 
-                                placeholder="description (optional)" 
+                                placeholder="additional_notes (optional)" 
                                 class="sidebar-textarea" 
-                                bind:value={doc}
+                                bind:value={note}
                                 rows="2"
                             ></textarea>
                             <button 
                                 class="sidebar-add-btn" 
                                 class:disabled={!selectedVaultId}
-                                disabled={!selectedVaultId || title == ""}
-                                onclick={() => selectedVaultId && addSecret("document")}
+                                disabled={!selectedVaultId || title == "" || cardNumber == "" || cardHolder == ""}
+                                onclick={() => selectedVaultId && addSecret("creditcard")}
                             >
                                 <span>ENCRYPT & STORE</span>
                                 <span class="btn-icon">🔐</span>
@@ -1625,6 +1557,23 @@ title = "";
                                 <button class="profile-action-btn primary" onclick={mfaSetup}>
                                     <span>ENABLE 2FA</span>
                                     <span class="btn-icon">🛡️</span>
+                                </button>
+                            </div>
+                        </div>
+                        {:else}
+                        <div class="profile-section">
+                            <h3 class="section-header">$ disable_2fa --security</h3>
+                            <div class="security-info">
+                                <div class="security-description">
+                                    <span class="security-icon">🔓</span>
+                                    <div class="security-text">
+                                        <h4>Two-Factor Authentication Enabled</h4>
+                                        <p>Your account is protected with TOTP-based 2FA. You can disable it if needed.</p>
+                                    </div>
+                                </div>
+                                <button class="profile-action-btn danger" onclick={openDisable2FAModal}>
+                                    <span>DISABLE 2FA</span>
+                                    <span class="btn-icon">⚠️</span>
                                 </button>
                             </div>
                         </div>
@@ -1802,8 +1751,8 @@ title = "";
                                             NOTE
                                         {:else if secret.data?.username}
                                             CREDENTIAL
-                                        {:else if secret.data?.fileName || secret.data?.file}
-                                            DOCUMENT
+                                        {:else if secret.data?.cardNumber}
+                                            CREDIT CARD
                                         {:else}
                                             DATA
                                         {/if}
@@ -1871,34 +1820,77 @@ title = "";
                                                 <span class="field-value">{secret.data.note}</span>
                                             </div>
                                         {/if}
-                                    {:else if secret.data.fileName}
-                                        <!-- New file upload format -->
-                                        <div class="field">
-                                            <span class="field-label">file:</span>
-                                            <span class="field-value file-name">{secret.data.fileName}</span>
-                                        </div>
-                                        <div class="field">
-                                            <span class="field-label">type:</span>
-                                            <span class="field-value">{secret.data.fileType}</span>
-                                        </div>
-                                        <div class="field">
-                                            <span class="field-label">size:</span>
-                                            <span class="field-value">{(secret.data.fileSize / 1024).toFixed(1)} KB</span>
-                                        </div>
-                                        <div class="field file-actions">
-                                            <span class="field-label">actions:</span>
-                                            <div class="action-buttons">
-                                                <button class="action-btn download-btn" onclick={() => downloadFile(secret.data)}>
-                                                    <span>📥 Download</span>
+                                    {:else if secret.data.cardNumber}
+                                        <!-- Credit card format -->
+                                        <div class="field credential-field">
+                                            <span class="field-label">cardholder:</span>
+                                            <div class="field-value-with-actions">
+                                                <span class="field-value">{secret.data.cardHolder}</span>
+                                                <button class="copy-btn" onclick={() => copyToClipboard(secret.data.cardHolder, 'Cardholder')}>
+                                                    <span>📋</span>
                                                 </button>
                                             </div>
                                         </div>
-                                    {:else if secret.data.file}
-                                        <!-- Legacy text format -->
-                                        <div class="field">
-                                            <span class="field-label">content:</span>
-                                            <span class="field-value">{secret.data.file}</span>
+                                        <div class="field credential-field">
+                                            <span class="field-label">card_number:</span>
+                                            <div class="field-value-with-actions">
+                                                <span class="field-value password">
+                                                    {visiblePasswords.has(secret.id) ? secret.data.cardNumber : "•••• •••• •••• " + secret.data.cardNumber.slice(-4)}
+                                                </span>
+                                                <div class="password-actions">
+                                                    <button class="toggle-btn" onclick={() => togglePasswordVisibility(secret.id)}>
+                                                        <span>{visiblePasswords.has(secret.id) ? '🙈' : '👁️'}</span>
+                                                    </button>
+                                                    <button class="copy-btn" onclick={() => copyToClipboard(secret.data.cardNumber, 'Card Number')}>
+                                                        <span>📋</span>
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
+                                        <div class="field credential-field">
+                                            <span class="field-label">expiry:</span>
+                                            <div class="field-value-with-actions">
+                                                <span class="field-value">{secret.data.expiryDate}</span>
+                                                <button class="copy-btn" onclick={() => copyToClipboard(secret.data.expiryDate, 'Expiry Date')}>
+                                                    <span>📋</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="field credential-field">
+                                            <span class="field-label">cvv:</span>
+                                            <div class="field-value-with-actions">
+                                                <span class="field-value password">
+                                                    {visiblePasswords.has(secret.id + '_cvv') ? secret.data.cvv : "•".repeat(secret.data.cvv.length)}
+                                                </span>
+                                                <div class="password-actions">
+                                                    <button class="toggle-btn" onclick={() => {
+                                                        if (visiblePasswords.has(secret.id + '_cvv')) {
+                                                            visiblePasswords.delete(secret.id + '_cvv');
+                                                        } else {
+                                                            visiblePasswords.add(secret.id + '_cvv');
+                                                        }
+                                                        visiblePasswords = new Set(visiblePasswords);
+                                                    }}>
+                                                        <span>{visiblePasswords.has(secret.id + '_cvv') ? '🙈' : '👁️'}</span>
+                                                    </button>
+                                                    <button class="copy-btn" onclick={() => copyToClipboard(secret.data.cvv, 'CVV')}>
+                                                        <span>�</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {#if secret.data.bankName}
+                                            <div class="field">
+                                                <span class="field-label">bank:</span>
+                                                <span class="field-value">{secret.data.bankName}</span>
+                                            </div>
+                                        {/if}
+                                        {#if secret.data.note}
+                                            <div class="field">
+                                                <span class="field-label">note:</span>
+                                                <span class="field-value">{secret.data.note}</span>
+                                            </div>
+                                        {/if}
                                     {:else}
                                         <pre class="debug-data">{JSON.stringify(secret.data, null, 2)}</pre>
                                     {/if}
@@ -2012,60 +2004,78 @@ title = "";
                                     ></textarea>
                                 </div>
                             </div>
-                        {:else if editedSecretData.fileName !== undefined || editedSecretData.file !== undefined}
-                            <!-- Document Form -->
+                        {:else if editedSecretData.cardNumber !== undefined}
+                            <!-- Credit Card Form -->
                             <div class="form-section">
-                                <h3 class="form-section-title">$ edit_document --update</h3>
+                                <h3 class="form-section-title">$ edit_creditcard --update</h3>
                                 <div class="form-group">
                                     <label class="form-label">title:</label>
                                     <input 
                                         type="text" 
                                         class="edit-input" 
                                         bind:value={editedSecretData.title}
-                                        placeholder="Document title"
+                                        placeholder="Card title"
                                     />
                                 </div>
-                                {#if editedSecretData.fileName}
-                                    <div class="current-file-info">
-                                        <div class="file-info-header">
-                                            <span class="file-icon">📄</span>
-                                            <span class="current-file-label">Current file:</span>
-                                        </div>
-                                        <div class="file-details">
-                                            <div class="file-detail">
-                                                <span class="detail-label">name:</span>
-                                                <span class="detail-value">{editedSecretData.fileName}</span>
-                                            </div>
-                                            <div class="file-detail">
-                                                <span class="detail-label">type:</span>
-                                                <span class="detail-value">{editedSecretData.fileType}</span>
-                                            </div>
-                                            <div class="file-detail">
-                                                <span class="detail-label">size:</span>
-                                                <span class="detail-value">{(editedSecretData.fileSize / 1024).toFixed(1)} KB</span>
-                                            </div>
-                                        </div>
-                                        <div class="file-actions">
-                                            <button class="file-action-btn" onclick={() => downloadFile(editedSecretData)}>
-                                                <span>📥 Download Current</span>
-                                            </button>
-                                        </div>
-                                        <div class="file-note">
-                                            <span class="note-icon">ℹ️</span>
-                                            <span class="note-text">Note: File content cannot be edited. Only title and description can be updated.</span>
-                                        </div>
+                                <div class="form-group">
+                                    <label class="form-label">cardholder:</label>
+                                    <input 
+                                        type="text" 
+                                        class="edit-input" 
+                                        bind:value={editedSecretData.cardHolder}
+                                        placeholder="Cardholder name"
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">card_number:</label>
+                                    <input 
+                                        type="text" 
+                                        class="edit-input" 
+                                        bind:value={editedSecretData.cardNumber}
+                                        placeholder="Card number"
+                                        maxlength="19"
+                                    />
+                                </div>
+                                <div class="form-group-row">
+                                    <div class="form-group half">
+                                        <label class="form-label">expiry:</label>
+                                        <input 
+                                            type="text" 
+                                            class="edit-input" 
+                                            bind:value={editedSecretData.expiryDate}
+                                            placeholder="MM/YY"
+                                            maxlength="5"
+                                        />
                                     </div>
-                                {:else}
-                                    <div class="form-group">
-                                        <label class="form-label">description:</label>
-                                        <textarea 
-                                            class="edit-textarea" 
-                                            bind:value={editedSecretData.file}
-                                            placeholder="Document description"
-                                            rows="4"
-                                        ></textarea>
+                                    <div class="form-group half">
+                                        <label class="form-label">cvv:</label>
+                                        <input 
+                                            type="password" 
+                                            class="edit-input" 
+                                            bind:value={editedSecretData.cvv}
+                                            placeholder="CVV"
+                                            maxlength="4"
+                                        />
                                     </div>
-                                {/if}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">bank:</label>
+                                    <input 
+                                        type="text" 
+                                        class="edit-input" 
+                                        bind:value={editedSecretData.bankName}
+                                        placeholder="Bank name (optional)"
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">notes:</label>
+                                    <textarea 
+                                        class="edit-textarea" 
+                                        bind:value={editedSecretData.note}
+                                        placeholder="Additional notes (optional)"
+                                        rows="3"
+                                    ></textarea>
+                                </div>
                             </div>
                         {/if}
                         
@@ -2302,6 +2312,71 @@ title = "";
                                     </button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    <!-- Disable 2FA Modal -->
+    {#if showDisable2FAModal}
+        <div class="modal-overlay" onclick={cancelDisable2FA}>
+            <div class="modal-container disable-2fa-modal" onclick={(e) => e.stopPropagation()}>
+                <div class="modal-header">
+                    <h2 class="modal-title">
+                        <span class="modal-icon">⚠️</span>
+                        <span>Disable Two-Factor Authentication</span>
+                    </h2>
+                    <button class="modal-close" onclick={cancelDisable2FA}>
+                        ×
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="disable-2fa-content">
+                        <div class="warning-section">
+                            <div class="warning-box">
+                                <span class="warning-icon-large">🔓</span>
+                                <div class="warning-text">
+                                    <h3>Warning: Reduced Security</h3>
+                                    <p>Disabling two-factor authentication will make your account less secure. You will only need your password to log in.</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="verification-section">
+                            <h4>Confirm with Authenticator Code</h4>
+                            <p class="verification-description">
+                                Enter the 6-digit code from your authenticator app to confirm disabling 2FA.
+                            </p>
+                            
+                            {#if disable2FAError}
+                                <div class="error-message">
+                                    <span class="error-icon">⚠</span>
+                                    <span>{disable2FAError}</span>
+                                </div>
+                            {/if}
+                            
+                            <div class="verification-form">
+                                <input 
+                                    type="text" 
+                                    class="verification-input" 
+                                    placeholder="Enter 6-digit code"
+                                    maxlength="6"
+                                    bind:value={disable2FACode}
+                                />
+                            </div>
+                        </div>
+                        
+                        <div class="modal-actions">
+                            <button class="modal-btn secondary" onclick={cancelDisable2FA}>
+                                <span>CANCEL</span>
+                            </button>
+                            <button class="modal-btn danger" onclick={disable2FA} disabled={!disable2FACode || disable2FACode.trim() === ""}>
+                                <span>DISABLE 2FA</span>
+                                <span class="btn-icon">🔓</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -3671,6 +3746,114 @@ title = "";
         box-shadow: 0 5px 15px rgba(0, 255, 65, 0.4);
     }
 
+    /* Disable 2FA Modal Styles */
+    .disable-2fa-modal {
+        max-width: 600px;
+        width: 95%;
+    }
+
+    .disable-2fa-content {
+        display: flex;
+        flex-direction: column;
+        gap: 25px;
+    }
+
+    .warning-section {
+        background: rgba(255, 107, 107, 0.1);
+        border: 1px solid #ff6b6b;
+        border-radius: 8px;
+        padding: 20px;
+    }
+
+    .warning-box {
+        display: flex;
+        gap: 15px;
+        align-items: flex-start;
+    }
+
+    .warning-icon-large {
+        font-size: 2.5rem;
+        flex-shrink: 0;
+    }
+
+    .warning-text h3 {
+        color: #ff6b6b;
+        font-size: 1.1rem;
+        margin: 0 0 10px 0;
+        font-weight: 600;
+    }
+
+    .warning-text p {
+        color: #ff9999;
+        font-size: 0.9rem;
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    .verification-description {
+        color: #888;
+        font-size: 0.9rem;
+        margin-bottom: 15px;
+        line-height: 1.5;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 15px;
+        justify-content: flex-end;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #333;
+    }
+
+    .modal-btn {
+        background: linear-gradient(45deg, #00aaff, #0088cc);
+        border: none;
+        color: #000;
+        padding: 12px 24px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .modal-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 170, 255, 0.4);
+    }
+
+    .modal-btn.secondary {
+        background: linear-gradient(45deg, #666, #555);
+        color: #fff;
+    }
+
+    .modal-btn.secondary:hover {
+        box-shadow: 0 5px 15px rgba(102, 102, 102, 0.4);
+    }
+
+    .modal-btn.danger {
+        background: linear-gradient(45deg, #ff6b6b, #ff5252);
+        color: #fff;
+    }
+
+    .modal-btn.danger:hover {
+        box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+    }
+
+    .modal-btn:disabled {
+        background: rgba(102, 102, 102, 0.3) !important;
+        color: #666 !important;
+        cursor: not-allowed;
+        transform: none !important;
+        box-shadow: none !important;
+        opacity: 0.6;
+    }
+
     .profile-section {
         background: rgba(0, 0, 0, 0.4);
         border: 1px solid #333;
@@ -4517,6 +4700,38 @@ title = "";
         background-color: rgba(0, 170, 255, 0.08);
         box-shadow: 0 0 0 2px rgba(0, 170, 255, 0.3);
         transform: translateY(-1px);
+    }
+
+    /* Credit card specific styles */
+    .card-details-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .sidebar-input.small {
+        width: 100%;
+    }
+
+    /* Edit modal credit card styles */
+    .form-group-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+
+    .form-group.half {
+        margin-bottom: 0;
+    }
+
+    @media (max-width: 768px) {
+        .card-details-row,
+        .form-group-row {
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
     }
 
     .sidebar-input::placeholder {

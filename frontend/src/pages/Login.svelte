@@ -112,6 +112,7 @@
             localStorage.setItem("preauth_token", data.preauth_token)
             
             showMFA = true;
+            result = "";
             return; // Remove the object return that was causing the issue
         }
 
@@ -235,6 +236,7 @@ window.onRecaptchaSuccess = function (token) {
                             class="input mfa-input"
                             maxlength="6"
                             required
+                            autofocus
                         />
                     </div>
                     
