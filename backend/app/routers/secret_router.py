@@ -23,6 +23,8 @@ async def create_secret(session: PgAsyncSession, vault_id: int, secret_type: str
     if not vault:
         raise HTTPException(status_code=403, detail="Access denied!")
 
+    secret_type = secret_type.lower()
+
     try:
         secret_type_enum = secret_model.SecretType(secret_type)
     except ValueError:

@@ -94,9 +94,9 @@ def check_pwned_password(password: str):
 
     for hash_suffix, count in hashes:
         if hash_suffix == suffix:
-            return True
+            return int(count)
 
 
-    return False
+    return 0
 
 

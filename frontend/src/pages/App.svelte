@@ -123,7 +123,6 @@
 
             return "Successfully disabled 2FA";
         } catch (error) {
-            console.error("Error disabling 2FA:", error);
             disable2FAError = "An unexpected error occurred";
         }
     }
@@ -228,7 +227,7 @@
             profile();
             return user.email;
         } catch (error) {
-            console.error("Error updating email:", error);
+
             errorstateEM = "An unexpected error occurred while updating email";
         }
     }
@@ -245,8 +244,8 @@
 
     async function updatePassword(){
 
-        if (currentPW != ""){
-            errorstateEM = "Please input your master password"
+        if (currentPW == ""){
+            errorstatePW = "Please input your master password!!!"
             return;
         }
         errorstatePW = "";
@@ -328,7 +327,6 @@
     
         const userKeyValue = get(userKey);
         if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
-            console.error("Invalid or missing user key when accessing profile, redirecting to login");
             localStorage.removeItem("access_token");
             userKey.set(null);
             navigate("/login");
@@ -466,7 +464,7 @@
             secretId = null;
 
         } catch (error) {
-            console.error("Error deleting secret:", error);
+       
             alert("Failed to delete secret. Please try again.");
         }
     }
@@ -517,7 +515,7 @@ function cancelEditSecret() {
 
         const userKeyValue = get(userKey);
         if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
-            console.error("Invalid or missing user key in updateSecret, redirecting to login");
+         
             localStorage.removeItem("access_token");
             userKey.set(null);
             navigate("/login");
@@ -580,11 +578,11 @@ function cancelEditSecret() {
         editedSecretData = {};
 
     } catch (error) {
-        console.error("Error updating secret:", error);
+   
         
         // Handle crypto-related errors that might indicate session issues
         if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
-            console.error("CryptoKey validation failed in updateSecret, clearing session");
+    
             localStorage.removeItem("access_token");
             userKey.set(null);
             navigate("/login");
@@ -592,7 +590,7 @@ function cancelEditSecret() {
         }
         
         if (error.name === 'OperationError' || error.name === 'InvalidAccessError') {
-            console.error("Crypto operation failed in updateSecret, likely due to invalid session");
+   
             localStorage.removeItem("access_token");
             userKey.set(null);
             navigate("/login");
@@ -670,7 +668,7 @@ function cancelEditSecret() {
             // Validate userKey before export
             const userKeyValue = get(userKey);
             if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
-                console.error("Invalid or missing user key for export, redirecting to login");
+       
                 localStorage.removeItem("access_token");
                 userKey.set(null);
                 navigate("/login");
@@ -693,7 +691,6 @@ function cancelEditSecret() {
 
             const encryptedSecrets = await response.json();
 
-            console.log("Fetched encrypted secrets:", encryptedSecrets.length);
 
             // Decrypt all secrets to get plaintext data
             const decryptedSecrets = await Promise.all(encryptedSecrets.map(async (secret) => {
@@ -740,7 +737,7 @@ function cancelEditSecret() {
                     };
 
                 } catch (err) {
-                    console.error("Failed to decrypt secret:", secret.id, err);
+                 
                     // Include failed secrets with error info
                     return {
                         id: secret.id,
@@ -753,12 +750,11 @@ function cancelEditSecret() {
                 }
             }));
 
-            console.log("Decrypted secrets:", decryptedSecrets.length);
+
 
             // All secrets are now exportable since we removed document support
             const exportableSecrets = decryptedSecrets;
 
-            console.log("Exportable secrets:", exportableSecrets.length);
 
             // Create export data structure with plaintext secrets
             const exportData = {
@@ -821,13 +817,10 @@ Keep it secure and delete it when no longer needed.
             readableData += `\n=== RAW JSON DATA (for programmatic access) ===\n`;
             readableData += JSON.stringify(exportData, null, 2);
 
-            console.log("Human-readable data prepared:", readableData.length, "characters");
-            console.log("First 500 characters:", readableData.substring(0, 500));
 
             // Encrypt with proper OpenPGP
             const encryptedData = await encryptWithPassphrase(readableData, exportPassphrase);
 
-            console.log("Encrypted data:", typeof encryptedData, encryptedData.length);
 
             // Create and download the PGP file
             await createAndDownloadZip(encryptedData);
@@ -838,11 +831,10 @@ Keep it secure and delete it when no longer needed.
             confirmExportPassphrase = "";
 
         } catch (error) {
-            console.error("Export failed:", error);
-            
+     
             // Handle crypto-related errors that might indicate session issues
             if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
-                console.error("CryptoKey validation failed in export, clearing session");
+      
                 localStorage.removeItem("access_token");
                 userKey.set(null);
                 navigate("/login");
@@ -850,7 +842,7 @@ Keep it secure and delete it when no longer needed.
             }
             
             if (error.name === 'OperationError' || error.name === 'InvalidAccessError') {
-                console.error("Crypto operation failed in export, likely due to invalid session");
+          
                 localStorage.removeItem("access_token");
                 userKey.set(null);
                 navigate("/login");
@@ -865,32 +857,25 @@ Keep it secure and delete it when no longer needed.
 
     async function encryptWithPassphrase(data, passphrase) {
         try {
-            console.log("Starting OpenPGP encryption...");
-            
+   
             // Use OpenPGP.js for proper PGP encryption
             const message = await openpgp.createMessage({ text: data });
-            console.log("Message created:", message);
-            
+      
             const encrypted = await openpgp.encrypt({
                 message,
                 passwords: [passphrase], // encrypt with password
                 format: 'armored' // ASCII armor format
             });
             
-            console.log("Encryption completed, result type:", typeof encrypted);
-            console.log("Encrypted data preview:", encrypted.substring(0, 100));
-            
             return encrypted;
         } catch (error) {
-            console.error('OpenPGP encryption failed:', error);
+    
             throw new Error('Failed to encrypt data with OpenPGP: ' + error.message);
         }
     }
 
     async function createAndDownloadZip(encryptedData) {
         try {
-            console.log("Creating download for encrypted data:", typeof encryptedData);
-            
             // Ensure we have valid encrypted data
             if (!encryptedData || typeof encryptedData !== 'string') {
                 throw new Error('Invalid encrypted data format');
@@ -902,8 +887,7 @@ Keep it secure and delete it when no longer needed.
             // Create a blob with the armored PGP data
             const blob = new Blob([encryptedData], { type: 'text/plain' });
             
-            console.log("Blob created, size:", blob.size);
-            
+
             // Download as .pgp file (now properly formatted)
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -915,9 +899,9 @@ Keep it secure and delete it when no longer needed.
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            console.log("Download initiated successfully");
+      
         } catch (error) {
-            console.error('Download creation failed:', error);
+    
             throw new Error('Failed to create download: ' + error.message);
         }
     }
@@ -929,7 +913,7 @@ Keep it secure and delete it when no longer needed.
             // Show temporary feedback
             const originalFieldName = fieldName;
             // You could add a toast notification here if desired
-            console.log(`${originalFieldName} copied to clipboard`);
+       
         } catch (error) {
             // Fallback for older browsers
             const textArea = document.createElement('textarea');
@@ -938,7 +922,7 @@ Keep it secure and delete it when no longer needed.
             textArea.select();
             document.execCommand('copy');
             document.body.removeChild(textArea);
-            console.log(`${fieldName} copied to clipboard (fallback)`);
+      
         }
     }
 
@@ -963,7 +947,6 @@ Keep it secure and delete it when no longer needed.
 
         getVaults();
         const userKeyValue = get(userKey);
-        console.log("UserKey at addSecret:", userKeyValue);
     });
 
 async function getVaults(){
@@ -1048,7 +1031,7 @@ async function getSecretsOfVault(vaultId){
           
           // Validate userKey before attempting decryption
           if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
-              console.error("Invalid or missing user key, redirecting to login");
+
               localStorage.removeItem("access_token");
               userKey.set(null);
               navigate("/login");
@@ -1086,11 +1069,11 @@ async function getSecretsOfVault(vaultId){
 
         } catch (err) {
             
-            console.error("Decrypt failed for secret:", err);
+     
             
             // Handle specific crypto errors that indicate session/key issues
             if (err.name === 'TypeError' && err.message.includes('CryptoKey')) {
-                console.error("CryptoKey validation failed, clearing session");
+    
                 localStorage.removeItem("access_token");
                 userKey.set(null);
                 navigate("/login");
@@ -1099,7 +1082,7 @@ async function getSecretsOfVault(vaultId){
             
             // Handle other crypto-related errors that might indicate session issues
             if (err.name === 'OperationError' || err.name === 'InvalidAccessError') {
-                console.error("Crypto operation failed, likely due to invalid session");
+           
                 localStorage.removeItem("access_token");
                 userKey.set(null);
                 navigate("/login");
@@ -1117,8 +1100,7 @@ async function getSecretsOfVault(vaultId){
 
 
 async function addSecret(secret_type){
-    console.log("addSecret called with:", secret_type);
-    
+
     // Add a simple check to prevent infinite recursion
     if (addSecret._running) {
         console.warn("addSecret already running, preventing recursion");
@@ -1175,7 +1157,7 @@ async function addSecret(secret_type){
 
             const userKeyValue = get(userKey);
         if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
-            console.error("Invalid or missing user key in addSecret, redirecting to login");
+
             localStorage.removeItem("access_token");
             userKey.set(null);
             navigate("/login");
@@ -1252,11 +1234,10 @@ async function addSecret(secret_type){
         bankName = "";
     
     } catch (error) {
-        console.error("Error in addSecret:", error);
+
         
         // Handle crypto-related errors that might indicate session issues
         if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
-            console.error("CryptoKey validation failed in addSecret, clearing session");
             localStorage.removeItem("access_token");
             userKey.set(null);
             navigate("/login");
@@ -1264,7 +1245,7 @@ async function addSecret(secret_type){
         }
         
         if (error.name === 'OperationError' || error.name === 'InvalidAccessError') {
-            console.error("Crypto operation failed in addSecret, likely due to invalid session");
+  
             localStorage.removeItem("access_token");
             userKey.set(null);
             navigate("/login");
@@ -1874,7 +1855,7 @@ async function addSecret(secret_type){
                                                         <span>{visiblePasswords.has(secret.id + '_cvv') ? '🙈' : '👁️'}</span>
                                                     </button>
                                                     <button class="copy-btn" onclick={() => copyToClipboard(secret.data.cvv, 'CVV')}>
-                                                        <span>�</span>
+                                                        <span>📋</span>
                                                     </button>
                                                 </div>
                                             </div>

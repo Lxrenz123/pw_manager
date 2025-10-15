@@ -7,14 +7,18 @@ import enum
 class SecretType(enum.Enum):
     CREDENTIAL = "credential"
     NOTE = "note"
-    DOCUMENT = "document"
-    CREDIT_CARD = "credit_card"
+    CREDITCARD = "creditcard"
 
 class Secret(Base):
     __tablename__ = "secret"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    type: Mapped[SecretType] = mapped_column(Enum(SecretType), nullable=False)
+
+    type: Mapped[SecretType] = mapped_column(
+        Enum(SecretType, values_callable=lambda x: [e.value for e in x], native_enum=False),
+        nullable=False
+    )
+
     data_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
     encrypted_secret_key: Mapped[str] = mapped_column(String, nullable=False) 

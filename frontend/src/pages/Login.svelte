@@ -91,8 +91,7 @@
         if (data.detail == "Please solve reCAPTCHA checkbox"){
 
             showReCaptcha_v2 = true;
-            console.log("v2 required");
-      
+
         } else if (showReCaptcha_v2) {
 
             if (window.grecaptcha) {
@@ -124,14 +123,12 @@
         if (typeof result !== 'string' || result === '') {
             result = 'An unexpected error occurred. Please try again.';
         }
-        console.error('Login error:', error);
     }
 }
 
 
 // @ts-ignore
 window.onRecaptchaSuccess = function (token) {
-  console.log("v2 solved, token:", token);
   // Option 1: direkt login() nochmal triggern
   login();
 };

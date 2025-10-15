@@ -24,8 +24,11 @@ async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSessi
     if existing_user:
         raise HTTPException(status_code=400, detail=f"The email {user_create.email} is not available")
 
-    if check_pwned_password(user_create.password):
-        raise HTTPException(status_code=400, detail="Your password is compromised, please choose a different password")
+    times_pwned = check_pwned_password(user_create.password)
+    if times_pwned != 0:
+        raise HTTPException(status_code=400, detail=f"Your password was found in {times_pwned} data breaches, please choose a different password")
+    
+
     
     db_user = user_model.User(
         email=user_create.email,
@@ -103,8 +106,10 @@ async def update_password(request: Request, session: PgAsyncSession, update_data
     if not verify_password(update_data.current_password, user_to_update.password):
         raise HTTPException(status_code=400, detail="Wrong master password")
 
-    if check_pwned_password(update_data.password):
-        raise HTTPException(status_code=400, detail="Your new password is compromised, please choose a different password")
+    times_pwned = check_pwned_password(update_data.password)
+    if times_pwned != 0:
+        raise HTTPException(status_code=400, detail=f"Your password was found in {times_pwned} data breaches, please choose a different password")
+    
 
     
     if update_data.password not in (None, ""):
