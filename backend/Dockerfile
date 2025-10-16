@@ -1,20 +1,20 @@
-FROM python:3.13-slim
+FROM python:3.13
 
-MAINTAINER "Lorenz Ritsch"
 
-WORKDIR /app
+WORKDIR /code
+
+COPY ./requirements.txt /tmp/requirements.txt
+
+RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
+
 
 RUN useradd -m appuser
+
+COPY ./app /code/app
+
+RUN chown -R appuser:appuser /code
 
 USER appuser
 
 
-COPY requirements.txt /tmp/requirements.txt
-
-COPY ./app /app
-
-
-RUN apt update 
-RUN pip install -r /tmpt/requirements.txt
-
-CMD ["./start_api.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

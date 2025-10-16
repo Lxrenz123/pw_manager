@@ -8,7 +8,23 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_DB=${POSTGRES_DATABASE}
+    restart: unless-stopped
+
+  api:
+    image: api
+    ports:
+      - 8000:8000
+    environment:
+     - DATABASE_URL=${DATABASE_URL}
+     - PREAUTH_TOKEN_EXPIRE=${PREAUTH_TOKEN_EXPIRE}
+     - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+     - ALGORITHM=${ALGORITHM}
+     - JWT_TOKEN_EXPIRE=${JWT_TOKEN_EXPIRE}
+     - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY}
+     - RECAPTCHAV2_SECRET_KEY=${RECAPTCHAV2_SECRET_KEY}
+    depends_on:
+     - postgres
     restart: unless-stopped
 
 volumes:
