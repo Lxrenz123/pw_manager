@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Cookie
+import os
 from app.schemas import user_schema, auth_schema, mfa_schema
 from app.auth import verify_password, create_access_token, create_preauth_token, verify_preauth_token
 from app.database import PgAsyncSession

@@ -1099,7 +1099,59 @@ async function getSecretsOfVault(vaultId){
 }
 
 
+
+async function checkCompromise() {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    
+    const hashBuffer = await window.crypto.subtle.digest('SHA-1', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+
+    const prefix = hashHex.slice(0, 5);
+    const suffix = hashHex.slice(5);
+
+    const result = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`);
+    if (!result.ok) throw new Error('Error fetching data from pwned API');
+
+    const body = await result.text();
+    for (const line of body.split(/\r?\n/)) {
+        if (!line) continue;
+        const [hashSuffix, count] = line.split(':');
+        if (hashSuffix === suffix) {
+            return parseInt(count, 10);
+        }
+    }
+
+    return 0;
+}
+
+
+
+let showcompromiseWarning = $state(false);
+let userIgnoresCompromise = $state(false);
+let compromiseCount = $state(0);
+
 async function addSecret(secret_type){
+    // Only check for compromised passwords on credentials
+    if (secret_type === "credential" && password && !userIgnoresCompromise) {
+        const breachCount = await checkCompromise();
+        if (breachCount > 0) {
+            compromiseCount = breachCount;
+            showcompromiseWarning = true;
+            return; // Stop here and show inline warning
+        }
+    }
+    
+    // If user acknowledged the warning or password is safe, proceed
+    if (showcompromiseWarning && !userIgnoresCompromise) {
+        return; // Don't proceed if warning is shown but not acknowledged
+    }
+
+
+
+
+
 
     // Add a simple check to prevent infinite recursion
     if (addSecret._running) {
@@ -1232,6 +1284,11 @@ async function addSecret(secret_type){
         expiryDate = "";
         cvv = "";
         bankName = "";
+        
+        // Reset compromise warning state
+        showcompromiseWarning = false;
+        userIgnoresCompromise = false;
+        compromiseCount = 0;
     
     } catch (error) {
 
@@ -1397,6 +1454,26 @@ async function addSecret(secret_type){
                                 bind:value={note}
                                 rows="2"
                             ></textarea>
+                            
+                            {#if showcompromiseWarning}
+                            <div class="compromise-warning-inline">
+                                <div class="warning-header">
+                                    <span class="warning-icon">⚠️</span>
+                                    <span class="warning-title">Password Compromised!</span>
+                                </div>
+                                <p class="warning-message">
+                                    This password was found <strong>{compromiseCount.toLocaleString()}</strong> times in data breaches.
+                                </p>
+                                <label class="warning-checkbox">
+                                    <input 
+                                        type="checkbox" 
+                                        bind:checked={userIgnoresCompromise}
+                                    />
+                                    <span>I understand the risks and want to use it anyway</span>
+                                </label>
+                            </div>
+                            {/if}
+                            
                             <button 
                                 class="sidebar-add-btn" 
                                 class:disabled={!selectedVaultId}
@@ -3833,6 +3910,75 @@ async function addSecret(secret_type){
         transform: none !important;
         box-shadow: none !important;
         opacity: 0.6;
+    }
+
+    /* Inline Compromise Warning */
+    .compromise-warning-inline {
+        background: rgba(255, 59, 48, 0.1);
+        border: 1px solid #ff3b30;
+        border-radius: 5px;
+        padding: 12px;
+        margin-bottom: 10px;
+        animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .warning-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .warning-header .warning-icon {
+        font-size: 1.2rem;
+    }
+
+    .warning-title {
+        color: #ff3b30;
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+
+    .warning-message {
+        color: #ffaaaa;
+        font-size: 0.8rem;
+        margin: 0 0 10px 0;
+        line-height: 1.4;
+    }
+
+    .warning-message strong {
+        color: #fff;
+        background: #ff3b30;
+        padding: 1px 5px;
+        border-radius: 3px;
+    }
+
+    .warning-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        user-select: none;
+        font-size: 0.75rem;
+        color: #ffc107;
+    }
+
+    .warning-checkbox input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        accent-color: #ffc107;
     }
 
     .profile-section {

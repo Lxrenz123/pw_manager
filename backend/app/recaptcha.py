@@ -1,9 +1,8 @@
 import os
-from dotenv import load_dotenv
+
 from fastapi import HTTPException
 import httpx
 
-load_dotenv()
 
 SECRET_CAPTCHA_KEYV3 = os.getenv("RECAPTCHA_SECRET_KEY")
 SECRET_CAPTCHA_KEYV2 = os.getenv("RECAPTCHAV2_SECRET_KEY")

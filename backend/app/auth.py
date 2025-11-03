@@ -1,9 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
-import os
 from jose import jwt, JWTError, ExpiredSignatureError
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
@@ -13,8 +11,7 @@ from sqlalchemy import select
 import time
 import hashlib
 import requests
-
-load_dotenv()
+import os
 
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")

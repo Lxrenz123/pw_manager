@@ -40,6 +40,11 @@
         if (!response.ok){
 
             result = data.detail || "2FA verification failed";
+            if (result == "Session expired, login again"){
+
+                password = "";
+                email = "";
+            }
             return;
         }
 
