@@ -1,13 +1,14 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Response, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from app.models import user_model
-from app.auth import hash_password, get_current_user, verify_password, check_pwned_password
+from app.auth import hash_password, get_current_user, verify_password, check_pwned_password, revoke_access_token
 from app.database import PgAsyncSession
 from app.schemas import user_schema
 from app.limiter import limiter
 from fastapi import Request
+from typing import Optional
 
 router = APIRouter(
     prefix="/user",
@@ -44,6 +45,7 @@ async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSessi
 
 @router.get("/me", response_model=user_schema.UserOutInfoMe)
 async def read_me(current_user: user_model.User = Depends(get_current_user)):
+
     return current_user
 
 @router.get("/salt", description="get salt of user's user key")
@@ -90,6 +92,8 @@ async def update_email(request: Request, session: PgAsyncSession, update_data: u
         id = user_to_update.id,
         email = user_to_update.email
     )
+
+    Response.set
 
     return updated_user
 
@@ -138,3 +142,22 @@ async def delete_user_me(session: PgAsyncSession, password: user_schema.UserDele
 
     return f"Successfully deleted user {user.email}"
 
+
+#not sure yet if this is bullet proof... probably
+@router.post("/logout")
+@limiter.limit("1/minute")
+async def logout(response: Request, session: PgAsyncSession, user: user_model.User = Depends(get_current_user)):
+    stmt = select(user_model.User).where(user_model.User.id == user.id)
+    result = await session.execute(stmt)
+    user_to_logout = result.scalars().first()
+
+    if not user_to_logout:
+        raise HTTPException(status_code=404, detail="User does not exist")
+    
+    access_token= Optional[str] = Cookie(None)
+
+    
+    if not revoke_access_token(access_token):
+        raise HTTPException(status_code=401, detail="Error revoking access_token")
+
+    return "Successfully logged out"

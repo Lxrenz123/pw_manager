@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Cookie
+from fastapi import APIRouter, Depends, HTTPException, Request, Cookie, Response
 import os
 from app.schemas import user_schema, auth_schema, mfa_schema
 from app.auth import verify_password, create_access_token, create_preauth_token, verify_preauth_token
@@ -21,18 +21,17 @@ router = APIRouter(
 
 @router.post("/login", response_model=Union[auth_schema.AuthResponse, auth_schema.PreAuth])
 @limiter.limit("5/minute")
-async def login(session: PgAsyncSession, credentials: auth_schema.Credentials, request: Request):
+async def login(response: Response, session: PgAsyncSession, credentials: auth_schema.Credentials, request: Request):
     client_ip = request.client.host
+
     score = await verify_recaptchav3(token=credentials.recaptcha_token, action="login", remote_ip=client_ip)
 
-
-    if score < 0.5:
+    if score < 0.7:
         if not credentials.recaptcha_token_v2:
             raise HTTPException(status_code=403, detail="Please solve reCAPTCHA checkbox")
         if not await verify_recaptchav2(token=credentials.recaptcha_token_v2, remote_ip=client_ip):
             raise HTTPException(status_code=403, detail="Captcha error")
 
-    
     email = credentials.email
     password = credentials.password
     stmt = select(user_model.User).where(user_model.User.email == email)
@@ -53,7 +52,6 @@ async def login(session: PgAsyncSession, credentials: auth_schema.Credentials, r
         return response_preauth
 
     auth_response = auth_schema.AuthResponse(
-        access_token=create_access_token(user.id),
         user=user_schema.UserLogin(
             id=user.id,
             email=user.email,
@@ -68,7 +66,17 @@ async def login(session: PgAsyncSession, credentials: auth_schema.Credentials, r
     session.add(user)
     await session.commit()
     await session.refresh(user)
-    
+
+    response.set_cookie(
+        key="access_token",
+        value=f"{create_access_token(user.id)}",
+        httponly=True,      
+        secure=True,        
+        samesite="strict",     
+        max_age=1800,       
+        path="/",           
+        domain="password123.pw" 
+    )
 
     return auth_response
 

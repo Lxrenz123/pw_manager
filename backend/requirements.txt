@@ -12,3 +12,4 @@ uvicorn==0.37.0
 asyncpg
 bcrypt==4.3.0
 Pillow
+redis==7.0.1
