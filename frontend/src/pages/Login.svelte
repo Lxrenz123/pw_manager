@@ -22,8 +22,6 @@
 
     async function verify2FA(){
         result = "";
-
-
         preauth_token = localStorage.getItem("preauth_token");
         const response = await fetch(`${apiBase}/auth/2fa-verify`, {
         method: "POST",
@@ -117,7 +115,7 @@
             
             showMFA = true;
             result = "";
-            return; // Remove the object return that was causing the issue
+            return; 
         }
 
 

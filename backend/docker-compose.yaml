@@ -24,6 +24,7 @@ services:
      - JWT_TOKEN_EXPIRE=${JWT_TOKEN_EXPIRE}
      - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY}
      - RECAPTCHAV2_SECRET_KEY=${RECAPTCHAV2_SECRET_KEY}
+     - CSRF_HMAC_SECRET=${CSRF_HMAC_SECRET}
     depends_on:
      - postgres
     restart: unless-stopped

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Response, Cookie
+from fastapi import APIRouter, HTTPException, status, Depends, Response, Cookie, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -9,16 +9,23 @@ from app.schemas import user_schema
 from app.limiter import limiter
 from fastapi import Request
 from typing import Optional
+from jose import jwt, JWTError, ExpiredSignatureError
+import os
+from app.csrf_protection import validate_csrf_token
 
 router = APIRouter(
     prefix="/user",
     tags=["User"],
 )
 
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
 
 @router.post("/", response_model=user_schema.UserOut)
 @limiter.limit("5/minute")
 async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSession, request: Request):
+
+    
     stmt = select(user_model.User).where(user_model.User.email == user_create.email)
     result = await session.execute(stmt)
     existing_user = result.scalars().first()
@@ -50,6 +57,7 @@ async def read_me(current_user: user_model.User = Depends(get_current_user)):
 
 @router.get("/salt", description="get salt of user's user key")
 async def get_salt(session: PgAsyncSession, user: user_model.User = Depends(get_current_user)):
+
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user = result.scalars().first()
@@ -64,7 +72,10 @@ async def get_salt(session: PgAsyncSession, user: user_model.User = Depends(get_
 
 @router.patch("/email", response_model=user_schema.UserOut)
 @limiter.limit("5/minute")
-async def update_email(request: Request, session: PgAsyncSession, update_data: user_schema.UpdateUserEmail, user: user_model.User = Depends(get_current_user)):
+async def update_email(request: Request, session: PgAsyncSession, update_data: user_schema.UpdateUserEmail, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+
+    if not validate_csrf_token(x_csrf_token, csrf_token):
+        raise HTTPException(status_code=403, detail="CSRF Protection")
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user_to_update = result.scalars().first()
@@ -100,7 +111,10 @@ async def update_email(request: Request, session: PgAsyncSession, update_data: u
 
 @router.patch("/password")
 @limiter.limit("5/minute")
-async def update_password(request: Request, session: PgAsyncSession, update_data: user_schema.UpdateUserPassword, user: user_schema.User = Depends(get_current_user)):
+async def update_password(request: Request, session: PgAsyncSession, update_data: user_schema.UpdateUserPassword, user: user_schema.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+
+    if not validate_csrf_token(x_csrf_token, csrf_token):
+        raise HTTPException(status_code=403, detail="CSRF Protection")
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user_to_update = result.scalars().first()
@@ -128,7 +142,11 @@ async def update_password(request: Request, session: PgAsyncSession, update_data
     return "Password successfully updated!"
     
 @router.delete("/")
-async def delete_user_me(session: PgAsyncSession, password: user_schema.UserDelete, user: user_model.User = Depends(get_current_user)):
+async def delete_user_me(session: PgAsyncSession, password: user_schema.UserDelete, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+
+    if not validate_csrf_token(x_csrf_token, csrf_token):
+        raise HTTPException(status_code=403, detail="CSRF Protection")
+    
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user_to_delete = result.scalars().first()
@@ -143,10 +161,13 @@ async def delete_user_me(session: PgAsyncSession, password: user_schema.UserDele
     return f"Successfully deleted user {user.email}"
 
 
-#not sure yet if this is bullet proof... probably
+
 @router.post("/logout")
-@limiter.limit("1/minute")
-async def logout(response: Request, session: PgAsyncSession, user: user_model.User = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def logout(response: Response, request: Request, session: PgAsyncSession, user: user_model.User = Depends(get_current_user), access_token: Optional[str] = Cookie(None), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+   
+    if not validate_csrf_token(x_csrf_token, csrf_token):
+        raise HTTPException(status_code=403, detail="CSRF Protection")
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user_to_logout = result.scalars().first()
@@ -154,10 +175,14 @@ async def logout(response: Request, session: PgAsyncSession, user: user_model.Us
     if not user_to_logout:
         raise HTTPException(status_code=404, detail="User does not exist")
     
-    access_token= Optional[str] = Cookie(None)
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token found")
 
-    
+        
     if not revoke_access_token(access_token):
         raise HTTPException(status_code=401, detail="Error revoking access_token")
+    
+
+    response.delete_cookie("access_token")
 
     return "Successfully logged out"

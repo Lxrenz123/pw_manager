@@ -1,11 +1,13 @@
 <script>
     import { onMount } from "svelte";
     import { apiBase } from "../script/api-base-url";
+    // @ts-ignore
     import { credentialSchema } from "../script/schema";
     import { userKey} from "../stores/user-key.js"
     import { get } from "svelte/store";
     import { navigate } from "svelte-routing";
     import { deriveKey } from "../script/crypto";
+    // @ts-ignore
     import { nonpassive } from "svelte/legacy";
     import * as openpgp from "openpgp";
 
@@ -24,6 +26,7 @@
 
     let user2FA = $state(false);
 
+    // @ts-ignore
     let showProfileModal = $state(false);
     let showProfile = $state(false);
 
@@ -35,7 +38,9 @@
     let secrets = $state([]);
     
     let title = $state("");
+    // @ts-ignore
     let data_plaintext = $state("");
+    // @ts-ignore
     let data_encrypted = $state("");
     let selectedVaultId = $state(null); 
 
@@ -59,6 +64,7 @@
     let activeSecretType = $state("credential"); // Track which form is active
     let visiblePasswords = $state(new Set()); // Track which passwords are visible
 
+    
     let newPW = $state("");
     let currentPW = $state("");
     let confirmPW = $state("");
@@ -106,7 +112,7 @@
                 headers: {
                     'Content-Type': 'application/json',
                     'accept': "application/json",
-                    "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+                    'X-CSRF-TOKEN': document.cookie.split("=")[1]
                 },
                 body: JSON.stringify({"code": disable2FACode})
             });
@@ -127,6 +133,7 @@
         }
     }
     function generateSecurePassword() {
+        console.log(document.cookie);
         isGeneratingPassword = true;
         
      
@@ -140,6 +147,7 @@
         
      
         const passwordLength = 16;
+        // @ts-ignore
         let generatedPassword = '';
         
      
@@ -205,7 +213,7 @@
             headers: {
             'Content-Type': 'application/json',
             'accept': "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+            'X-CSRF-TOKEN': document.cookie.split("=")[1]
             },
             body: JSON.stringify({"email": trimmedEmail, "password": emailconfirmPW})
         });
@@ -232,8 +240,10 @@
         }
     }
 
+    // @ts-ignore
     let credentialPWlength = $state("");
 
+    // @ts-ignore
     async function generatePassword(){
 
   
@@ -254,7 +264,6 @@
         headers: {
         'Content-Type': 'application/json',
         'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
         },
     });
 
@@ -287,7 +296,7 @@
         headers: {
         'Content-Type': 'application/json',
         'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        'X-CSRF-TOKEN': document.cookie.split("=")[1]
         },
         body: JSON.stringify({"current_password": currentPW, "password": newPW, "user_key": btoa(String.fromCharCode(...new Uint8Array(encryptedUserKey))),
         iv: btoa(String.fromCharCode(...iv))
@@ -340,11 +349,12 @@
         headers: {
         'Content-Type': 'application/json',
         'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+
         }});
 
         if (!response.ok){
             throw new Error("Error");
+            // @ts-ignore
             return;
         }
 
@@ -372,11 +382,12 @@
         headers: {
         'Content-Type': 'application/json',
         'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        'X-CSRF-TOKEN': document.cookie.split("=")[1]
         }});
 
         if (!response.ok){
             throw new Error("Error");
+            // @ts-ignore
             return;
         }
 
@@ -401,7 +412,7 @@
         headers: {
         'Content-Type': 'application/json',
         'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        'X-CSRF-TOKEN': document.cookie.split("=")[1]
         },
         body: JSON.stringify({"code": mfaCode})
 
@@ -409,6 +420,7 @@
 
         if (!response.ok){
             throw new Error("Error");
+            // @ts-ignore
             return;
         }
 
@@ -447,7 +459,7 @@
                 headers: {
                 'Content-Type': 'application/json',
                 'accept': "application/json",
-                "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+                'X-CSRF-TOKEN': document.cookie.split("=")[1]
                 }, 
             });
 
@@ -549,7 +561,7 @@ function cancelEditSecret() {
             headers: {
                 'Content-Type': 'application/json',
                 'accept': "application/json",
-                "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+                'X-CSRF-TOKEN': document.cookie.split("=")[1]
             },
             body: JSON.stringify({
                 data_encrypted: encryptedSecretB64,
@@ -617,7 +629,7 @@ function cancelEditSecret() {
         headers: {
         'Content-Type': 'application/json',
         'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        'X-CSRF-TOKEN': document.cookie.split("=")[1]
         },
         body: JSON.stringify({"password": confirmMasterPW})
     
@@ -625,6 +637,7 @@ function cancelEditSecret() {
 
         if (!response.ok){
             throw new Error("Error");
+            // @ts-ignore
             return;
         }
 
@@ -681,7 +694,7 @@ function cancelEditSecret() {
                 headers: {
                     'Content-Type': 'application/json',
                     'accept': "application/json",
-                    "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        
                 }
             });
 
@@ -911,6 +924,7 @@ Keep it secure and delete it when no longer needed.
         try {
             await navigator.clipboard.writeText(text);
             // Show temporary feedback
+            // @ts-ignore
             const originalFieldName = fieldName;
             // You could add a toast notification here if desired
        
@@ -938,14 +952,10 @@ Keep it secure and delete it when no longer needed.
 
 
     onMount(async () => {
-        // Check authentication
-        const token = localStorage.getItem("access_token");
-        if (!token) {
-            navigate("/login");
-            return;
-        }
+
 
         getVaults();
+        // @ts-ignore
         const userKeyValue = get(userKey);
     });
 
@@ -955,7 +965,7 @@ async function getVaults(){
                         headers: {
                         'Content-Type': 'application/json',
                         'accept': "application/json",
-                        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+      
                         }
                     }
                     )
@@ -963,6 +973,7 @@ async function getVaults(){
     
     if (!response.ok){
         throw new Error("Network error");
+        // @ts-ignore
         return;
     }
 
@@ -975,18 +986,20 @@ async function getVaults(){
 }
 
 async function addVault(){
+        
        const response = await fetch(`${apiBase}/vault/`, {
                         method: "POST",
                         headers: {
                         'Content-Type': 'application/json',
                         'accept': "application/json",
-                        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+                        'X-CSRF-TOKEN': document.cookie.split("=")[1]
                         },
                         body: JSON.stringify({name: vaultName})
                     }
                     )
     if (!response.ok){
         throw new Error("Network error");
+        // @ts-ignore
         return;
     }
 
@@ -1006,12 +1019,13 @@ async function getSecretsOfVault(vaultId){
         headers: {
         'Content-Type': 'application/json',
         'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+ 
         }
     })
 
     if (!response.ok){
         throw new Error("Network error");
+        // @ts-ignore
         return;
     }
     const encryptedSecrets = await response.json(); 
@@ -1073,7 +1087,7 @@ async function getSecretsOfVault(vaultId){
             
             // Handle specific crypto errors that indicate session/key issues
             if (err.name === 'TypeError' && err.message.includes('CryptoKey')) {
-    
+                
                 localStorage.removeItem("access_token");
                 userKey.set(null);
                 navigate("/login");
@@ -1154,10 +1168,12 @@ async function addSecret(secret_type){
 
 
     // Add a simple check to prevent infinite recursion
+    // @ts-ignore
     if (addSecret._running) {
         console.warn("addSecret already running, preventing recursion");
         return;
     }
+    // @ts-ignore
     addSecret._running = true;
 
     try {
@@ -1246,7 +1262,7 @@ async function addSecret(secret_type){
         headers: {
         'Content-Type': 'application/json',
         'accept': "application/json",
-        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        'X-CSRF-TOKEN': document.cookie.split("=")[1]
         },
         body: JSON.stringify({            
             data_encrypted: encryptedSecretB64,
@@ -1257,6 +1273,7 @@ async function addSecret(secret_type){
 
     if (!response.ok){
         throw new Error("Network error");
+        // @ts-ignore
         return;
     }
 
@@ -1295,7 +1312,7 @@ async function addSecret(secret_type){
         
         // Handle crypto-related errors that might indicate session issues
         if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
-            localStorage.removeItem("access_token");
+ 
             userKey.set(null);
             navigate("/login");
             return;
@@ -1311,6 +1328,7 @@ async function addSecret(secret_type){
         
         alert("Error adding secret: " + error.message);
     } finally {
+        // @ts-ignore
         addSecret._running = false;
     }
 }
@@ -1748,10 +1766,10 @@ async function addSecret(secret_type){
                                 </div>
                             {/if}
                             
-                            {#if newPW && newPW.length < 8}
+                            {#if newPW && newPW.length < 10}
                                 <div class="error-message">
                                     <span class="error-icon">⚠</span>
-                                    <span>Password must be at least 8 characters long</span>
+                                    <span>Password must be at least 10 characters long</span>
                                 </div>
                             {/if}
                             

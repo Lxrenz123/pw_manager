@@ -12,6 +12,7 @@ from typing import Union
 from app.recaptcha import verify_recaptchav3, verify_recaptchav2
 import requests
 from app.limiter import limiter
+from app.csrf_protection import create_csrf_token
 
 
 router = APIRouter(
@@ -67,6 +68,7 @@ async def login(response: Response, session: PgAsyncSession, credentials: auth_s
     await session.commit()
     await session.refresh(user)
 
+  
     response.set_cookie(
         key="access_token",
         value=f"{create_access_token(user.id)}",
@@ -77,12 +79,23 @@ async def login(response: Response, session: PgAsyncSession, credentials: auth_s
         path="/",           
         domain="password123.pw" 
     )
+    response.set_cookie(
+        key="csrf_token",
+        value=create_csrf_token(),
+        httponly=False,      
+        secure=True,        
+        samesite="strict",     
+        max_age=1800,       
+        path="/",           
+        domain="password123.pw" 
+    )
+
 
     return auth_response
 
 @router.post("/2fa-verify", response_model=auth_schema.AuthResponse)
 @limiter.limit("3/minute")
-async def verify_2fa(request: Request,session: PgAsyncSession, mfadata: mfa_schema.Verify):
+async def verify_2fa(response: Response, request: Request,session: PgAsyncSession, mfadata: mfa_schema.Verify):
     
     if not verify_preauth_token(mfadata.preauth_token):
         raise HTTPException(status_code=400, detail="Invalid Token")
@@ -99,7 +112,6 @@ async def verify_2fa(request: Request,session: PgAsyncSession, mfadata: mfa_sche
         raise HTTPException(status_code=401, detail="Invalid 2FA code")
     
     auth_response = auth_schema.AuthResponse(
-    access_token=create_access_token(user.id),
     user=user_schema.UserLogin(
         id=user.id,
         email=user.email,
@@ -114,6 +126,28 @@ async def verify_2fa(request: Request,session: PgAsyncSession, mfadata: mfa_sche
     session.add(user)
     await session.commit()
     await session.refresh(user)
+
+    response.set_cookie(
+        key="access_token",
+        value=f"{create_access_token(user.id)}",
+        httponly=True,      
+        secure=True,        
+        samesite="strict",     
+        max_age=1800,       
+        path="/",           
+        domain="password123.pw" 
+    )
+    response.set_cookie(
+        key="csrf_token",
+        value=create_csrf_token(),
+        httponly=False,      
+        secure=True,        
+        samesite="strict",     
+        max_age=1800,       
+        path="/",           
+        domain="password123.pw" 
+    )
+
 
     return auth_response
 

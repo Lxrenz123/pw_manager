@@ -43,7 +43,6 @@ export async function deriveKey(password, salt){
 export async function loginCrypto(data, password){
 
    
-    localStorage.setItem("access_token", data.access_token);
 
     const salt = Uint8Array.from(atob(data.user.salt), c => c.charCodeAt(0));
     const encryptedUserKey = Uint8Array.from(atob(data.user.user_key), c => c.charCodeAt(0));

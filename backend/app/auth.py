@@ -13,6 +13,13 @@ import time
 import hashlib
 import requests
 import os
+import uuid
+import redis
+
+import redis
+
+
+r = redis.Redis(host="redis", port=6379, db=0, decode_responses=True)
 
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
@@ -36,21 +43,21 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(user_id: int):
     expire = datetime.utcnow() + timedelta(minutes=int(TOKEN_EXPIRE_MINUTES))
-    data = {"sub": str(user_id), "exp": expire}
+
+    jti = str(uuid.uuid4())
+    
+    data = {"sub": str(user_id), "exp": expire, "jti": jti}
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 def create_preauth_token(user_id: int):
     expire = datetime.utcnow() + timedelta(minutes=int(PREAUTH_TOKEN_EXPIRE))
-    data = {"sub": str(user_id), "2fa": "pending", "exp": expire }
+    jti = str(uuid.uuid4())
+    data = {"sub": str(user_id), "2fa": "pending", "exp": expire, "jti": jti}
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 async def get_current_user(token: str = Depends(get_token_from_cookie), session: AsyncSession = Depends(get_db)):
 
     error = HTTPException(status_code=401, detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"})
-
-    if is_blacklisted(token):
-        error
-
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -61,6 +68,10 @@ async def get_current_user(token: str = Depends(get_token_from_cookie), session:
     
     if payload.get("2fa") == "pending":
         raise HTTPException(status_code=403, detail="2FA verification required")
+    
+    if is_blacklisted(payload.get("jti")):
+        raise error
+
     
     user_id = payload.get("sub")
     if user_id is None:
@@ -109,8 +120,35 @@ def check_pwned_password(password: str):
 
 
 def revoke_access_token(access_token: str) -> bool:
-    pass
 
-def is_blacklisted(token: str) -> bool:  
-    pass
+    try:
+        payload = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])
+        jti = payload.get("jti")
+        exp = payload.get("exp")
+        if not jti:
+            raise HTTPException(status_code=400, detail="No jti in token")
+        if not exp:
+            raise HTTPException(status_code=400, detail="No expiration time in token")
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="token expired")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    
+    current_time = int(time.time())
+    expire_seconds = exp - current_time
+    if expire_seconds <= 0:
+   
+        return False
+
+    key = f"blacklist:{jti}"
+    r.set(key, "true", ex=expire_seconds)
+
+    return True
+
+def is_blacklisted(jti: str) -> bool:  
+
+    key = f"blacklist:{jti}"
+    
+    return r.exists(key) == 1
 
