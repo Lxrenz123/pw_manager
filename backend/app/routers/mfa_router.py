@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.models import user_model
 from app.twofa import generate_otp_secret, get_provisioning_uri, qrcode_data_url, verifiy_totp 
 from app.auth import get_current_user
-from app.csrf_protection import validate_csrf_token
+from app.csrf_protection import validate_csrf_token, csrf_error
 
 router = APIRouter(prefix="/2fa", tags=["2fa"])
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/2fa", tags=["2fa"])
 async def setup_2fa(session: PgAsyncSession, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
     
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
 
     if user.mfa_enabled:
         raise HTTPException(status_code=400, detail="2FA already enabled")
@@ -39,7 +39,7 @@ async def setup_2fa(session: PgAsyncSession, user: user_model.User = Depends(get
 @router.post("/confirm")
 async def confirm_2fa(session: PgAsyncSession, code: mfa_schema.Confirm, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
     
 
     if not user.otp_secret:
@@ -62,7 +62,7 @@ async def confirm_2fa(session: PgAsyncSession, code: mfa_schema.Confirm, user: u
 async def disable_2fa(session: PgAsyncSession, code: mfa_schema.Confirm, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
     
     if not user.mfa_enabled:
         raise HTTPException(status_code=400, detail="2FA is already disabled")

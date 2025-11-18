@@ -6,7 +6,7 @@ from app.models import user_model, vault_model
 from app.database import PgAsyncSession
 from app.schemas import vault_schema
 from app.auth import get_current_user
-from app.csrf_protection import validate_csrf_token
+from app.csrf_protection import validate_csrf_token, csrf_error
 
 router = APIRouter(
     prefix="/vault",
@@ -28,7 +28,7 @@ async def get_vaults(session: PgAsyncSession, current_user: user_model.User = De
 async def create_vault(session: PgAsyncSession, vault_data: vault_schema.CreateVault, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
     
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
     stmt = select(vault_model.Vault).where(vault_model.Vault.owner_id == user.id, vault_model.Vault.name == vault_data.name)
     result = await session.execute(stmt)
     existing_vault = result.scalars().first()
@@ -50,7 +50,7 @@ async def create_vault(session: PgAsyncSession, vault_data: vault_schema.CreateV
 async def update_vault(session: PgAsyncSession, vault_id: int, vault_data: vault_schema.UpdateVault, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
    
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
     stmt = select(vault_model.Vault).where(vault_model.Vault.id == vault_id, vault_model.Vault.owner_id == user.id)
     result = await session.execute(stmt)
     vault = result.scalar_one_or_none()
@@ -72,7 +72,7 @@ async def update_vault(session: PgAsyncSession, vault_id: int, vault_data: vault
 async def delete_vault(session: PgAsyncSession, vault_id: int, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
     stmt = select(vault_model.Vault).where(vault_model.Vault.id == vault_id, vault_model.Vault.owner_id == user.id)
     result = await session.execute(stmt)
     vault = result.scalar_one_or_none()

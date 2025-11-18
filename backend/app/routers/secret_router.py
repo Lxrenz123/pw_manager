@@ -6,7 +6,7 @@ from app.models import user_model, vault_model, secret_model
 from app.database import PgAsyncSession
 from app.schemas import secret_schema
 from app.auth import get_current_user
-from app.csrf_protection import validate_csrf_token
+from app.csrf_protection import validate_csrf_token, csrf_error
 
 router = APIRouter(
     prefix="/secret",
@@ -18,7 +18,7 @@ router = APIRouter(
 async def create_secret(session: PgAsyncSession, vault_id: int, secret_type: str, secret_data: secret_schema.CreateSecret, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
 
     stmt = select(vault_model.Vault).where(vault_model.Vault.owner_id == user.id, vault_model.Vault.id == vault_id)
     result = await session.execute(stmt)
@@ -127,7 +127,7 @@ async def update_secret(session: PgAsyncSession, secret_id: int, secret_data: se
 async def delete_secret(session: PgAsyncSession, secret_id: int, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
     stmt = select(secret_model.Secret).join(vault_model.Vault).where(secret_model.Secret.id == secret_id, vault_model.Vault.owner_id == user.id)
     result = await session.execute(stmt)
     secret_to_delete = result.scalars().first()

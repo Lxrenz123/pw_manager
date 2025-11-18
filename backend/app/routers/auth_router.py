@@ -10,8 +10,11 @@ from app.twofa import verifiy_totp
 from typing import Union
 from app.recaptcha import verify_recaptchav3, verify_recaptchav2
 from app.limiter import limiter
-from app.csrf_protection import create_csrf_token
+from app.csrf_protection import create_csrf_token, csrf_error
 from app.logger import logger
+
+
+domain = "password123.pw"
 
 router = APIRouter(
     prefix="/auth",
@@ -77,7 +80,7 @@ async def login(response: Response, session: PgAsyncSession, credentials: auth_s
         samesite="strict",     
         max_age=1800,       
         path="/",           
-        domain="password123.pw" 
+        domain=domain 
     )
     response.set_cookie(
         key="csrf_token",
@@ -87,7 +90,7 @@ async def login(response: Response, session: PgAsyncSession, credentials: auth_s
         samesite="strict",     
         max_age=1800,       
         path="/",           
-        domain="password123.pw" 
+        domain=domain
     )
 
     request.state.user = user
@@ -135,7 +138,7 @@ async def verify_2fa(response: Response, request: Request,session: PgAsyncSessio
         samesite="strict",     
         max_age=1800,       
         path="/",           
-        domain="password123.pw" 
+        domain=domain
     )
     response.set_cookie(
         key="csrf_token",
@@ -145,7 +148,7 @@ async def verify_2fa(response: Response, request: Request,session: PgAsyncSessio
         samesite="strict",     
         max_age=1800,       
         path="/",           
-        domain="password123.pw" 
+        domain=domain
     )
 
 

@@ -12,7 +12,7 @@ from fastapi import Request
 from typing import Optional
 from jose import jwt, JWTError, ExpiredSignatureError
 import os
-from app.csrf_protection import validate_csrf_token
+from app.csrf_protection import validate_csrf_token, csrf_error
 
 router = APIRouter(
     prefix="/user",
@@ -21,6 +21,8 @@ router = APIRouter(
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
+
+
 
 @router.post("/", response_model=user_schema.UserOut)
 @limiter.limit("5/minute")
@@ -64,7 +66,7 @@ async def get_salt(session: PgAsyncSession, user: user_model.User = Depends(get_
     user = result.scalars().first()
 
     if not user:
-        raise HTTPException(status_code=403, detail=f"This user does not exist or you are not that user!")
+        raise HTTPException(status_code=403, detail="This user does not exist or you are not that user!")
     
     user_salt = user.salt
 
@@ -76,7 +78,7 @@ async def get_salt(session: PgAsyncSession, user: user_model.User = Depends(get_
 async def update_email(request: Request, session: PgAsyncSession, update_data: user_schema.UpdateUserEmail, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user_to_update = result.scalars().first()
@@ -114,7 +116,7 @@ async def update_email(request: Request, session: PgAsyncSession, update_data: u
 async def update_password(request: Request, session: PgAsyncSession, update_data: user_schema.UpdateUserPassword, user: user_schema.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user_to_update = result.scalars().first()
@@ -145,7 +147,7 @@ async def update_password(request: Request, session: PgAsyncSession, update_data
 async def delete_user_me(session: PgAsyncSession, password: user_schema.UserDelete, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
     
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
@@ -166,7 +168,7 @@ async def delete_user_me(session: PgAsyncSession, password: user_schema.UserDele
 async def logout(response: Response, request: Request, session: PgAsyncSession, user: user_model.User = Depends(get_current_user), access_token: Optional[str] = Cookie(None), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
    
     if not validate_csrf_token(x_csrf_token, csrf_token):
-        raise HTTPException(status_code=403, detail="CSRF Protection")
+        raise HTTPException(status_code=403, detail=csrf_error)
     stmt = select(user_model.User).where(user_model.User.id == user.id)
     result = await session.execute(stmt)
     user_to_logout = result.scalars().first()

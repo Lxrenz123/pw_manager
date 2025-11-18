@@ -10,6 +10,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.types import ASGIApp
 
+
+httprequest = "HTTP REQUEST"
+
 class JsonFormatter(logging.Formatter):
     def format(self, record):
         log_record = {
@@ -63,7 +66,7 @@ class LogMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             duration = round((time.time() - start) * 1000, 2)
             logger.error(
-                "HTTP REQUEST",
+                httprequest,
                 extra={
                     "request_id": request_id,
                     "src_ip": client_ip,
@@ -99,7 +102,7 @@ class LogMiddleware(BaseHTTPMiddleware):
                 pass
 
         level_method(
-            "HTTP REQUEST",
+            httprequest,
             extra={
                 "request_id": request_id,
                 "src_ip": client_ip,
@@ -124,7 +127,7 @@ def setup_error_logging(app: FastAPI):
         request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
         client_ip = getattr(request.state, "client_ip", request.client.host)
         logger.warning(
-            "HTTP REQUEST",
+            httprequest,
             extra={
                 "request_id": request_id,
                 "src_ip": client_ip,
@@ -147,7 +150,7 @@ def setup_error_logging(app: FastAPI):
         request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
         client_ip = getattr(request.state, "client_ip", request.client.host)
         logger.error(
-            "HTTP REQUEST",
+            httprequest,
             extra={
                 "request_id": request_id,
                 "src_ip": client_ip,

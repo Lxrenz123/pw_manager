@@ -7,6 +7,9 @@ from typing import Optional
 
 CSRF_HMAC_SECRET = os.getenv("CSRF_HMAC_SECRET")
 
+csrf_error = "CSRF Protection"
+
+
 def create_csrf_token():
 
     random_value = secrets.token_hex(16)
