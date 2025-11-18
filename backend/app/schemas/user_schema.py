@@ -26,6 +26,7 @@ class UserOutInfoMe(BaseModel):
     mfa_enabled: bool
 
     @validator('mfa_enabled', pre=True)
+    @classmethod
     def convert_none_to_false(cls, v):
         return False if v is None else v
 

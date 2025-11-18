@@ -11,15 +11,6 @@ from fastapi import FastAPI, Request
 
 from app.logger import logger, LogMiddleware, setup_error_logging
 
-##logging test
-import logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-
-logger = logging.getLogger(__name__)
 
 
 async def generic_error_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
@@ -36,8 +27,6 @@ app.add_exception_handler(RateLimitExceeded, generic_error_handler)
 
 setup_error_logging(app)
 
-
-app.middleware
 
 
 app.add_middleware(

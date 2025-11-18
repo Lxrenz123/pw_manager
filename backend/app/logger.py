@@ -3,7 +3,6 @@ import logging
 import os
 import json
 import uuid
-import traceback
 from typing import Callable
 from fastapi import HTTPException, Request, FastAPI
 from fastapi.responses import JSONResponse
@@ -96,7 +95,7 @@ class LogMiddleware(BaseHTTPMiddleware):
                     data = json.loads(body_text)
                     if isinstance(data, dict) and "detail" in data:
                         error_detail = data["detail"]
-            except Exception:
+            except (UnicodeDecodeError, json.JSONDecodeError, AttributeError, TypeError):
                 pass
 
         level_method(
