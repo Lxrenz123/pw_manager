@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Response, Cookie, Header
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -71,7 +72,7 @@ async def get_salt(session: PgAsyncSession, user: user_model.User = Depends(get_
 
 
 @router.patch("/email", response_model=user_schema.UserOut)
-@limiter.limit("5/minute")
+@limiter.limit("3/minute")
 async def update_email(request: Request, session: PgAsyncSession, update_data: user_schema.UpdateUserEmail, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
@@ -104,7 +105,6 @@ async def update_email(request: Request, session: PgAsyncSession, update_data: u
         email = user_to_update.email
     )
 
-    Response.set
 
     return updated_user
 
@@ -141,7 +141,7 @@ async def update_password(request: Request, session: PgAsyncSession, update_data
 
     return "Password successfully updated!"
     
-@router.delete("/")
+@router.delete("/delete")
 async def delete_user_me(session: PgAsyncSession, password: user_schema.UserDelete, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
@@ -163,7 +163,6 @@ async def delete_user_me(session: PgAsyncSession, password: user_schema.UserDele
 
 
 @router.post("/logout")
-@limiter.limit("10/minute")
 async def logout(response: Response, request: Request, session: PgAsyncSession, user: user_model.User = Depends(get_current_user), access_token: Optional[str] = Cookie(None), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
    
     if not validate_csrf_token(x_csrf_token, csrf_token):
@@ -183,6 +182,10 @@ async def logout(response: Response, request: Request, session: PgAsyncSession, 
         raise HTTPException(status_code=401, detail="Error revoking access_token")
     
 
-    response.delete_cookie("access_token")
-
-    return "Successfully logged out"
+   
+    response = JSONResponse({"detail": "Successfully logged out"})
+    response.delete_cookie(key="access_token",path="/", domain="password123.pw")
+    response.delete_cookie(key="csrf_token",path="/", domain="password123.pw")
+    
+    
+    return response

@@ -8,9 +8,9 @@
 </script>
 
 <Router>
-  <Route path="/">
 
-errer
+  <Route path="/">
+    <Login />
   </Route>
   
   <Route path="/login">

@@ -1,24 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Cookie, Response
-import os
 from app.schemas import user_schema, auth_schema, mfa_schema
 from app.auth import verify_password, create_access_token, create_preauth_token, verify_preauth_token
 from app.database import PgAsyncSession
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models import user_model
-from datetime import datetime
+from datetime import datetime, UTC
 from app.twofa import verifiy_totp
 from typing import Union
 from app.recaptcha import verify_recaptchav3, verify_recaptchav2
-import requests
 from app.limiter import limiter
 from app.csrf_protection import create_csrf_token
-
+from app.logger import logger
 
 router = APIRouter(
     prefix="/auth",
     tags=["Auth"],
 )
+
 
 @router.post("/login", response_model=Union[auth_schema.AuthResponse, auth_schema.PreAuth])
 @limiter.limit("5/minute")
@@ -49,7 +48,7 @@ async def login(response: Response, session: PgAsyncSession, credentials: auth_s
             mfa_required=True,
             preauth_token=create_preauth_token(user.id)
         )
-
+        
         return response_preauth
 
     auth_response = auth_schema.AuthResponse(
@@ -62,7 +61,8 @@ async def login(response: Response, session: PgAsyncSession, credentials: auth_s
         )
     )
 
-    user.last_login = datetime.utcnow()
+
+    user.last_login = datetime.now(UTC)
 
     session.add(user)
     await session.commit()
@@ -90,7 +90,7 @@ async def login(response: Response, session: PgAsyncSession, credentials: auth_s
         domain="password123.pw" 
     )
 
-
+    request.state.user = user
     return auth_response
 
 @router.post("/2fa-verify", response_model=auth_schema.AuthResponse)
@@ -121,7 +121,7 @@ async def verify_2fa(response: Response, request: Request,session: PgAsyncSessio
         )
     )
 
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(UTC)
 
     session.add(user)
     await session.commit()

@@ -25,9 +25,17 @@ services:
      - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY}
      - RECAPTCHAV2_SECRET_KEY=${RECAPTCHAV2_SECRET_KEY}
      - CSRF_HMAC_SECRET=${CSRF_HMAC_SECRET}
+     - DATABASE_URL_ALEMBIC=${DATABASE_URL_ALEMBIC}
     depends_on:
      - postgres
     restart: unless-stopped
+
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://172.19.0.1:514"  
+        tag: "api"                              
+        syslog-format: rfc5424micro          
   
   redis:
     image: redis:8.2

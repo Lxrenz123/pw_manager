@@ -14,7 +14,7 @@
     let showReCaptcha_v2 = $state(false);
       onMount(() => {
     const script = document.createElement("script");
-    script.src = "https://www.google.com/recaptcha/api.js?render=6Lf8kdkrAAAAAAfwdEZ3YRQA-SgMSutBnEXTTb3e";
+    script.src = "https://www.google.com/recaptcha/api.js?render=6Lecuw0sAAAAAJqVrcsGz6wpPgEA85xP3t-8fmoy";
     script.async = true;
     script.defer = true;
     document.head.appendChild(script);
@@ -63,7 +63,7 @@
 
     try {
         // @ts-ignore
-        const v3token = await window.grecaptcha.execute("6Lf8kdkrAAAAAAfwdEZ3YRQA-SgMSutBnEXTTb3e", { action: "login"});
+        const v3token = await window.grecaptcha.execute("6Lecuw0sAAAAAJqVrcsGz6wpPgEA85xP3t-8fmoy", { action: "login"});
 
         if (showReCaptcha_v2){
 
@@ -88,7 +88,7 @@
         if (!response.ok){
 
             // Ensure result is always a string
-            result = typeof data.detail === 'string' ? data.detail : 'Login failed. Please try again.';
+            result = typeof data.detail === 'string' ? data.detail : 'Login failed';
 
              
         if (data.detail == "Please solve reCAPTCHA checkbox"){

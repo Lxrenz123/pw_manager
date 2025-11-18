@@ -1,5 +1,5 @@
 from sqlalchemy import Integer, String, ForeignKey, DateTime, func, Enum, LargeBinary
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
 from app.database import Base
 import enum
@@ -27,8 +27,8 @@ class Secret(Base):
     secret_iv: Mapped[str] = mapped_column(String, nullable=False) 
     vault_id: Mapped[int] = mapped_column(Integer, ForeignKey("vault.id"), nullable=False, index=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now(UTC), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now(UTC), onupdate=datetime.now(UTC), server_default=func.now(), nullable=False)
 
 
     vault: Mapped["Vault"] = relationship(back_populates="secret")

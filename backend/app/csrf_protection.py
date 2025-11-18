@@ -21,10 +21,10 @@ def create_csrf_token():
 def validate_csrf_token(csrf_token_header: str, csrf_token_cookie: Optional[str] = Cookie(None)):
 
     if not csrf_token_cookie or not csrf_token_header:
-        raise HTTPException(status_code=403, detail="CSRF Token missing")
+        raise HTTPException(status_code=403, detail="Missing csrf token!")
     
     if csrf_token_header != csrf_token_cookie:
-        raise HTTPException(status_code=403, detail="CSRF Token missing")
+        raise HTTPException(status_code=403, detail="Missing csrf token!")
     
     try:
         value, signature = csrf_token_cookie.split(":")

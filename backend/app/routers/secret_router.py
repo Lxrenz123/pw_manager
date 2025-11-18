@@ -116,7 +116,7 @@ async def update_secret(session: PgAsyncSession, secret_id: int, secret_data: se
     try:
         await session.commit()
         await session.refresh(secret)
-    except Exception as e:
+    except Exception:
         await session.rollback()
         raise HTTPException(status_code=500, detail="An error occurred while updating the secret")
 

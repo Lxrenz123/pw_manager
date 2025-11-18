@@ -13,3 +13,5 @@ asyncpg
 bcrypt==4.3.0
 Pillow
 redis==7.0.1
+alembic
+psycopg2

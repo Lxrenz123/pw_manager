@@ -19,6 +19,8 @@
 
     let errorstateEM = $state("");
 
+    let error = $state("");
+
     let userId = $state("");
     let userEmail = $state("");
     let userCreationDate = $state("");
@@ -69,22 +71,143 @@
     let currentPW = $state("");
     let confirmPW = $state("");
 
+    // Secret search
+    let secretSearch = $state("");
+    let filteredSecrets = $state([]);
+    $effect(() => {
+        const q = secretSearch.trim().toLowerCase();
+        filteredSecrets = q === "" ? secrets : secrets.filter(s => (s.data?.title || "").toLowerCase().includes(q));
+    });
+
     let emailUpdateSuccess = $state("");
     let passwordUpdateSuccess = $state("");
     
     let isGeneratingPassword = $state(false);
     let showPasswordInForm = $state(false);
+    // Centralized error detail messages
+    const MISSING_ACCESS_TOKEN_DETAIL = "Missing access token!";
+    const MISSING_CSRF_TOKEN_DETAIL = "Missing csrf token!";
+
+    //execute this code if userKey is missing
+    $effect(() => {
+        const key = $userKey; 
+
+        if (!key) {
+            navigate("/login");
+            logout()
+        }
+    });
+
+    // Install a global fetch interceptor once to catch auth/csrf failures and redirect
+    function initFetchInterceptor(){
+        if (typeof window === 'undefined' || window.__fetchPatched) return;
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = async (...args) => {
+            const response = await originalFetch(...args);
+            try {
+                // Only inspect JSON responses
+                const ct = response.headers.get('content-type') || '';
+                if (ct.includes('application/json')) {
+                    const data = await response.clone().json();
+                    if (data?.detail === MISSING_ACCESS_TOKEN_DETAIL || data?.detail === MISSING_CSRF_TOKEN_DETAIL) {
+                        try { localStorage.removeItem('access_token'); } catch {}
+                        userKey.set(null);
+                        navigate('/login');
+                    }
+                }
+            } catch(_) { /* ignore parse errors */ }
+            return response;
+        };
+        window.__fetchPatched = true;
+    }
     
     // Email validation function
     function isValidEmail(email) {
         const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
         return emailRegex.test(email) && email.length <= 254;
     }
+
+    let vaultError = $state("");
+    let secretErrors = $state({});
+    let vaultAttempted = $state(false);
+    let secretAttempted = $state(false);
+    let visibleSecretErrors = $state([]);
+
+    function sanitizeWhitespace(v) { return v.replace(/\s+/g,' ').trim(); }
+    function limit(v, n) { return v.length > n ? v.slice(0,n) : v; }
+
+    function validateVaultName(name){
+        if(!name) return "";
+        const n = sanitizeWhitespace(name);
+        if(n.length < 3) return "min 3 chars";
+        if(n.length > 64) return "max 64 chars";
+        if(!/^[A-Za-z0-9 _-]+$/.test(n)) return "invalid chars";
+        return "";
+    }
+
+    function validateSecretFields(){
+        const errs = {};
+        const t = sanitizeWhitespace(title);
+        if(!t) errs.title = "required"; else if(t.length>32) errs.title="max 32";
+        if(activeSecretType === 'credential'){
+            const u = sanitizeWhitespace(username);
+            if(!u) errs.username = "required"; else if(u.length>128) errs.username = "max 128";
+            if(!password) errs.password = "required"; else if(password.length<8) errs.password="min 8"; else if(password.length>256) errs.password="max 256";
+            if(url){
+                const up = url.trim();
+                if(up.length>256) errs.url="max 256";
+            }
+            if(note && note.length>2000) errs.note="note max 2000";
+        } else if(activeSecretType === 'note'){
+            if(note && note.length>4000) errs.note="max 4000";
+        } else if(activeSecretType === 'creditcard'){
+            const holder = sanitizeWhitespace(cardHolder);
+            if(!holder) errs.cardHolder="required"; else if(holder.length>128) errs.cardHolder="max 128";
+            const numberDigits = cardNumber.replace(/[^0-9]/g,'');
+            if(!numberDigits) errs.cardNumber="required"; else if(numberDigits.length<13) errs.cardNumber="min 13"; else if(numberDigits.length>19) errs.cardNumber="max 19";
+            if(expiryDate){
+                if(!/^(0[1-9]|1[0-2])\/[0-9]{2}$/.test(expiryDate)) errs.expiryDate="MM/YY";
+            } else errs.expiryDate="required";
+            if(cvv){
+                if(!/^[0-9]{3,4}$/.test(cvv)) errs.cvv="cvv 3-4";
+            } else errs.cvv="required";
+            if(note && note.length>1000) errs.note="note max 1000";
+        }
+        secretErrors = errs;
+    }
+
+    $effect(() => { validateSecretFields(); });
+    $effect(() => { vaultError = validateVaultName(vaultName); });
+
+    function fieldValueByKey(key){
+        switch(key){
+            case 'title': return title;
+            case 'username': return username;
+            case 'password': return password;
+            case 'url': return url;
+            case 'note': return note;
+            case 'cardHolder': return cardHolder;
+            case 'cardNumber': return cardNumber;
+            case 'expiryDate': return expiryDate;
+            case 'cvv': return cvv;
+            default: return '';
+        }
+    }
+    function isOptionalField(key){ return key === 'url' || key === 'note' || key === 'bankName'; }
+    $effect(() => {
+        // Only show errors when user typed something in that field, or after submit attempt.
+        const entries = Object.entries(secretErrors).filter(([k, v]) => {
+            const val = (fieldValueByKey(k) || '').trim();
+            if (isOptionalField(k)) {
+                return val.length > 0; // optional fields: show only if user typed
+            }
+            // required fields: show if user typed or after attempt
+            return secretAttempted || val.length > 0;
+        });
+        visibleSecretErrors = entries;
+    });
     
-    let showExportModal = $state(false);
-    let exportPassphrase = $state("");
-    let confirmExportPassphrase = $state("");
-    let isExporting = $state(false);
+  
 
     function openDisable2FAModal() {
         showDisable2FAModal = true;
@@ -326,8 +449,17 @@
     }
 
 
-    function logout() {
-        localStorage.removeItem("access_token");
+    async function logout() {
+
+        const response = await fetch(`${apiBase}/user/logout`, {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.cookie.split("=")[1]
+            }
+        });
+
+  
         userKey.set(null);
         navigate("/login");
     }
@@ -477,7 +609,7 @@
 
         } catch (error) {
        
-            alert("Failed to delete secret. Please try again.");
+    
         }
     }
 
@@ -609,7 +741,7 @@ function cancelEditSecret() {
             return;
         }
         
-        alert("Failed to update secret. Please try again.");
+
     } finally {
         isEditingSecret = false;
     }
@@ -624,7 +756,7 @@ function cancelEditSecret() {
         async function confirmDelete() {
             
 
-        const response = await fetch(`${apiBase}/user`, {
+        const response = await fetch(`/api/user/delete`, {
         method: "DELETE",
         headers: {
         'Content-Type': 'application/json',
@@ -635,9 +767,9 @@ function cancelEditSecret() {
     
     });
 
+    const data = await response.json()
         if (!response.ok){
-            throw new Error("Error");
-            // @ts-ignore
+            error = data.detail;
             return;
         }
 
@@ -652,272 +784,7 @@ function cancelEditSecret() {
         confirmMasterPW = "";
     }
 
-    function openExportModal() {
-        showExportModal = true;
-        exportPassphrase = "";
-        confirmExportPassphrase = "";
-    }
-
-    function cancelExport() {
-        showExportModal = false;
-        exportPassphrase = "";
-        confirmExportPassphrase = "";
-    }
-
-    async function secretsExport() {
-        if (exportPassphrase !== confirmExportPassphrase) {
-            alert("Passphrases do not match!");
-            return;
-        }
-
-        if (exportPassphrase.length < 8) {
-            alert("Passphrase must be at least 8 characters long!");
-            return;
-        }
-
-        try {
-            isExporting = true;
-
-            // Validate userKey before export
-            const userKeyValue = get(userKey);
-            if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
-       
-                localStorage.removeItem("access_token");
-                userKey.set(null);
-                navigate("/login");
-                return;
-            }
-
-            // Fetch all secrets from backend (these are still encrypted)
-            const response = await fetch(`${apiBase}/secret`, {
-                method: "GET",
-                headers: {
-                    'Content-Type': 'application/json',
-                    'accept': "application/json",
-        
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error("Failed to fetch secrets");
-            }
-
-            const encryptedSecrets = await response.json();
-
-
-            // Decrypt all secrets to get plaintext data
-            const decryptedSecrets = await Promise.all(encryptedSecrets.map(async (secret) => {
-                try {
-                    // Decrypt the secret key
-                    const encSecretKeyBytes = Uint8Array.from(atob(secret.encrypted_secret_key), c => c.charCodeAt(0));
-                    const ivKey = Uint8Array.from(atob(secret.secret_key_iv), c => c.charCodeAt(0));
-
-                    const secretKeyBytes = await crypto.subtle.decrypt(
-                        { name: "AES-GCM", iv: ivKey },
-                        userKeyValue,
-                        encSecretKeyBytes
-                    );
-
-                    const secretKey = await crypto.subtle.importKey(
-                        "raw",
-                        secretKeyBytes,
-                        { name: "AES-GCM" },
-                        false,
-                        ["encrypt", "decrypt"]
-                    );
-
-                    // Decrypt the actual secret data
-                    const ivData = Uint8Array.from(atob(secret.secret_iv), c => c.charCodeAt(0));
-                    const encryptedData = Uint8Array.from(atob(secret.data_encrypted), c => c.charCodeAt(0));
-
-                    const decryptedData = await crypto.subtle.decrypt(
-                        { name: "AES-GCM", iv: ivData },
-                        secretKey,
-                        encryptedData
-                    );
-
-                    const decoder = new TextDecoder();
-                    const plaintext = decoder.decode(decryptedData);
-
-                    // Return secret with decrypted data and metadata
-                    return {
-                        id: secret.id,
-                        vault_id: secret.vault_id,
-                        secret_type: secret.secret_type,
-                        created_at: secret.created_at,
-                        updated_at: secret.updated_at,
-                        data: JSON.parse(plaintext) // This is now plaintext data
-                    };
-
-                } catch (err) {
-                 
-                    // Include failed secrets with error info
-                    return {
-                        id: secret.id,
-                        vault_id: secret.vault_id,
-                        secret_type: secret.secret_type,
-                        created_at: secret.created_at,
-                        updated_at: secret.updated_at,
-                        data: { error: "Decryption failed", original_error: err.message }
-                    };
-                }
-            }));
-
-
-
-            // All secrets are now exportable since we removed document support
-            const exportableSecrets = decryptedSecrets;
-
-
-            // Create export data structure with plaintext secrets
-            const exportData = {
-                export_timestamp: new Date().toISOString(),
-                export_type: "pgp_encrypted_backup",
-                app_name: "Password123",
-                version: "1.0",
-                user_note: "This backup contains your decrypted vault secrets. Keep it secure!",
-                total_secrets: exportableSecrets.length,
-                secrets: exportableSecrets
-            };
-
-            // Convert to a more readable format
-            let readableData = `=== PASSWORD123 VAULT BACKUP ===
-Export Date: ${exportData.export_timestamp}
-Total Secrets: ${exportData.total_secrets}
-App Version: ${exportData.version}
-
-IMPORTANT: This file contains your decrypted passwords and sensitive data.
-Keep it secure and delete it when no longer needed.
-
-=== VAULT CONTENTS ===
-
-`;
-
-            // Add each secret in a readable format
-            exportableSecrets.forEach((secret, index) => {
-                readableData += `--- Secret ${index + 1} ---\n`;
-                readableData += `ID: ${secret.id}\n`;
-                readableData += `Type: ${secret.secret_type}\n`;
-                readableData += `Vault ID: ${secret.vault_id}\n`;
-                readableData += `Created: ${secret.created_at}\n`;
-                readableData += `Updated: ${secret.updated_at}\n`;
-                
-                if (secret.data.error) {
-                    readableData += `ERROR: ${secret.data.error}\n`;
-                } else {
-                    readableData += `Title: ${secret.data.title || 'N/A'}\n`;
-                    
-                    if (secret.secret_type === 'credential') {
-                        readableData += `Username: ${secret.data.username || 'N/A'}\n`;
-                        readableData += `Password: ${secret.data.password || 'N/A'}\n`;
-                        readableData += `URL: ${secret.data.url || 'N/A'}\n`;
-                        readableData += `Notes: ${secret.data.note || 'N/A'}\n`;
-                    } else if (secret.secret_type === 'note') {
-                        readableData += `Content: ${secret.data.content || 'N/A'}\n`;
-                    } else if (secret.secret_type === 'creditcard') {
-                        readableData += `Cardholder: ${secret.data.cardHolder || 'N/A'}\n`;
-                        readableData += `Card Number: ${secret.data.cardNumber || 'N/A'}\n`;
-                        readableData += `Expiry Date: ${secret.data.expiryDate || 'N/A'}\n`;
-                        readableData += `CVV: ${secret.data.cvv || 'N/A'}\n`;
-                        readableData += `Bank: ${secret.data.bankName || 'N/A'}\n`;
-                        readableData += `Notes: ${secret.data.note || 'N/A'}\n`;
-                    }
-                }
-                readableData += `\n`;
-            });
-
-            // Also include JSON format at the end for programmatic access
-            readableData += `\n=== RAW JSON DATA (for programmatic access) ===\n`;
-            readableData += JSON.stringify(exportData, null, 2);
-
-
-            // Encrypt with proper OpenPGP
-            const encryptedData = await encryptWithPassphrase(readableData, exportPassphrase);
-
-
-            // Create and download the PGP file
-            await createAndDownloadZip(encryptedData);
-
-            // Close modal and reset state
-            showExportModal = false;
-            exportPassphrase = "";
-            confirmExportPassphrase = "";
-
-        } catch (error) {
-     
-            // Handle crypto-related errors that might indicate session issues
-            if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
-      
-                localStorage.removeItem("access_token");
-                userKey.set(null);
-                navigate("/login");
-                return;
-            }
-            
-            if (error.name === 'OperationError' || error.name === 'InvalidAccessError') {
-          
-                localStorage.removeItem("access_token");
-                userKey.set(null);
-                navigate("/login");
-                return;
-            }
-            
-            alert("Export failed: " + error.message);
-        } finally {
-            isExporting = false;
-        }
-    }
-
-    async function encryptWithPassphrase(data, passphrase) {
-        try {
-   
-            // Use OpenPGP.js for proper PGP encryption
-            const message = await openpgp.createMessage({ text: data });
-      
-            const encrypted = await openpgp.encrypt({
-                message,
-                passwords: [passphrase], // encrypt with password
-                format: 'armored' // ASCII armor format
-            });
-            
-            return encrypted;
-        } catch (error) {
-    
-            throw new Error('Failed to encrypt data with OpenPGP: ' + error.message);
-        }
-    }
-
-    async function createAndDownloadZip(encryptedData) {
-        try {
-            // Ensure we have valid encrypted data
-            if (!encryptedData || typeof encryptedData !== 'string') {
-                throw new Error('Invalid encrypted data format');
-            }
-            
-            // Create a proper PGP file
-            const timestamp = new Date();
-            
-            // Create a blob with the armored PGP data
-            const blob = new Blob([encryptedData], { type: 'text/plain' });
-            
-
-            // Download as .pgp file (now properly formatted)
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `password123_backup_${timestamp.toISOString().split('T')[0]}.pgp`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-      
-        } catch (error) {
-    
-            throw new Error('Failed to create download: ' + error.message);
-        }
-    }
+    // Export functionality removed.
 
 
     async function copyToClipboard(text, fieldName) {
@@ -952,8 +819,7 @@ Keep it secure and delete it when no longer needed.
 
 
     onMount(async () => {
-
-
+        initFetchInterceptor();
         getVaults();
         // @ts-ignore
         const userKeyValue = get(userKey);
@@ -986,31 +852,27 @@ async function getVaults(){
 }
 
 async function addVault(){
-        
-       const response = await fetch(`${apiBase}/vault/`, {
-                        method: "POST",
-                        headers: {
-                        'Content-Type': 'application/json',
-                        'accept': "application/json",
-                        'X-CSRF-TOKEN': document.cookie.split("=")[1]
-                        },
-                        body: JSON.stringify({name: vaultName})
-                    }
-                    )
+    vaultAttempted = true;
+    if(vaultError || !vaultName.trim()) return;
+    const response = await fetch(`${apiBase}/vault/`, {
+        method: "POST",
+        headers: {
+            'Content-Type': 'application/json',
+            'accept': "application/json",
+            'X-CSRF-TOKEN': document.cookie.split("=")[1]
+        },
+        body: JSON.stringify({name: vaultName.trim()})
+    });
     if (!response.ok){
         throw new Error("Network error");
-        // @ts-ignore
         return;
     }
-
-    const newVault = await response.json()
-    vaults.push(newVault)
+    const newVault = await response.json();
+    vaults.push(newVault);
     vaultName = "";
-
-    // Auto-select the newly created vault
+    vaultAttempted = false;
     selectedVaultId = newVault.id;
     getSecretsOfVault(newVault.id);
-
 }
 
 async function getSecretsOfVault(vaultId){
@@ -1146,7 +1008,10 @@ let showcompromiseWarning = $state(false);
 let userIgnoresCompromise = $state(false);
 let compromiseCount = $state(0);
 
-async function addSecret(secret_type){
+    async function addSecret(secret_type){
+        secretAttempted = true;
+        validateSecretFields();
+        if(Object.keys(secretErrors).length>0) return;
     // Only check for compromised passwords on credentials
     if (secret_type === "credential" && password && !userIgnoresCompromise) {
         const breachCount = await checkCompromise();
@@ -1178,25 +1043,25 @@ async function addSecret(secret_type){
 
     try {
         newCredential = {
-            title: title,
-            username: username,
+            title: title.trim(),
+            username: username.trim(),
             password: password,
-            url: url,
+            url: url.trim(),
             note: note
-        }
+        };
         newNote = {
-            title: title,
+            title: title.trim(),
             content: note
-        }
+        };
         newCreditCard = {
-            title: title,
-            cardHolder: cardHolder,
-            cardNumber: cardNumber,
-            expiryDate: expiryDate,
-            cvv: cvv,
-            bankName: bankName,
+            title: title.trim(),
+            cardHolder: cardHolder.trim(),
+            cardNumber: cardNumber.replace(/\s+/g,'').trim(),
+            expiryDate: expiryDate.trim(),
+            cvv: cvv.trim(),
+            bankName: bankName.trim(),
             note: note
-        }
+        };
 
    const secretKeyBytes = crypto.getRandomValues(new Uint8Array(32));
    const secretKey = await crypto.subtle.importKey(
@@ -1228,7 +1093,7 @@ async function addSecret(secret_type){
 
             localStorage.removeItem("access_token");
             userKey.set(null);
-            navigate("/login");
+            navigate("1");
             return;
         }
 
@@ -1306,6 +1171,7 @@ async function addSecret(secret_type){
         showcompromiseWarning = false;
         userIgnoresCompromise = false;
         compromiseCount = 0;
+        secretAttempted = false;
     
     } catch (error) {
 
@@ -1326,7 +1192,7 @@ async function addSecret(secret_type){
             return;
         }
         
-        alert("Error adding secret: " + error.message);
+     
     } finally {
         // @ts-ignore
         addSecret._running = false;
@@ -1387,7 +1253,10 @@ async function addSecret(secret_type){
                     placeholder="vault_name" 
                     bind:value={vaultName} 
                 />
-                <button class="add-vault-btn" onclick={addVault} disabled={vaultName == ""}>
+                {#if vaultError}
+                    <div class="field-error">{vaultError}</div>
+                {/if}
+                <button class="add-vault-btn" onclick={addVault} disabled={vaultName=="" || vaultError}>
                     <span>CREATE</span>
                 </button>
             </div>
@@ -1407,7 +1276,7 @@ async function addSecret(secret_type){
                         >
                             <option value="credential">🔑 CREDENTIAL</option>
                             <option value="note">📝 NOTE</option>
-                            <option value="creditcard">� CREDIT CARD</option>
+                            <option value="creditcard">💳 CREDIT CARD</option>
                         </select>
                     </div>
 
@@ -1492,12 +1361,19 @@ async function addSecret(secret_type){
                             </div>
                             {/if}
                             
+                            {#if visibleSecretErrors.length>0}
+                                <div class="field-error-group">
+                                    {#each visibleSecretErrors as [k,v]}
+                                        <div class="field-error">{k}: {v}</div>
+                                    {/each}
+                                </div>
+                            {/if}
                             <button 
                                 class="sidebar-add-btn" 
                                 class:disabled={!selectedVaultId}
-                                disabled={!selectedVaultId || title == ""} 
+                                disabled={!selectedVaultId || (secretAttempted && visibleSecretErrors.length>0)} 
                                 onclick={() => selectedVaultId && addSecret("credential")}
-                            >>
+                            >
                                 <span>ENCRYPT & STORE</span>
                                 <span class="btn-icon">🔐</span>
                             </button>
@@ -1513,12 +1389,19 @@ async function addSecret(secret_type){
                                 bind:value={note}
                                 rows="3"
                             ></textarea>
+                            {#if visibleSecretErrors.length>0}
+                                <div class="field-error-group">
+                                    {#each visibleSecretErrors as [k,v]}
+                                        <div class="field-error">{k}: {v}</div>
+                                    {/each}
+                                </div>
+                            {/if}
                             <button 
                                 class="sidebar-add-btn" 
                                 class:disabled={!selectedVaultId}
-                                disabled={!selectedVaultId || title == ""}
+                                disabled={!selectedVaultId || (secretAttempted && visibleSecretErrors.length>0)}
                                 onclick={() => selectedVaultId && addSecret("note")}
-                            >>
+                            >
                                 <span>ENCRYPT & STORE</span>
                                 <span class="btn-icon">🔐</span>
                             </button>
@@ -1565,10 +1448,17 @@ async function addSecret(secret_type){
                                 bind:value={note}
                                 rows="2"
                             ></textarea>
+                            {#if visibleSecretErrors.length>0}
+                                <div class="field-error-group">
+                                    {#each visibleSecretErrors as [k,v]}
+                                        <div class="field-error">{k}: {v}</div>
+                                    {/each}
+                                </div>
+                            {/if}
                             <button 
                                 class="sidebar-add-btn" 
                                 class:disabled={!selectedVaultId}
-                                disabled={!selectedVaultId || title == "" || cardNumber == "" || cardHolder == ""}
+                                disabled={!selectedVaultId || (secretAttempted && visibleSecretErrors.length>0)}
                                 onclick={() => selectedVaultId && addSecret("creditcard")}
                             >
                                 <span>ENCRYPT & STORE</span>
@@ -1596,10 +1486,7 @@ async function addSecret(secret_type){
                         <div class="profile-section">
                             <h3 class="section-header">$ account_info --current</h3>
                             <div class="info-grid">
-                                <div class="info-item">
-                                    <span class="info-label">user_id:</span>
-                                    <span class="info-value">{userId}</span>
-                                </div>
+
                                 <div class="info-item">
                                     <span class="info-label">email:</span>
                                     <span class="info-value">{userEmail}</span>
@@ -1782,16 +1669,7 @@ async function addSecret(secret_type){
                         <div class="profile-section">
                             <h3 class="section-header">$ security_actions --danger</h3>
                             <div class="danger-zone">
-                                <div class="danger-item">
-                                    <div class="danger-info">
-                                        <h4>Export Encrypted Data</h4>
-                                        <p>Download all your encrypted vault data for backup purposes</p>
-                                    </div>
-                                    <button class="profile-action-btn secondary" onclick={openExportModal}>
-                                        <span>EXPORT DATA</span>
-                                        <span class="btn-icon">📤</span>
-                                    </button>
-                                </div>
+                                <!-- Export feature removed -->
                                 <div class="danger-item">
                                     <div class="danger-info">
                                         <h4>Delete Account</h4>
@@ -1816,8 +1694,14 @@ async function addSecret(secret_type){
                 </div>
 
                 <!-- Secrets List -->
+                <div class="secrets-search">
+                    <input class="search-input" placeholder="search_title" bind:value={secretSearch} />
+                    {#if secretSearch.trim() && filteredSecrets.length === 0}
+                        <div class="search-empty">// NO MATCHING SECRETS</div>
+                    {/if}
+                </div>
                 <div class="secrets-list">
-                    {#each secrets as secret}
+                    {#each filteredSecrets as secret}
                         <div class="secret-card">
                             <div class="secret-header">
                                 <h4 class="secret-title">{secret.data?.title}</h4>
@@ -2217,11 +2101,15 @@ async function addSecret(secret_type){
                             />
                         </div>
                     </div>
+                        {#if error}
+                            <div class="error-message">{error}</div>
+                        {/if}
                     <div class="confirm-actions">
                         <button class="confirm-btn cancel" onclick={cancelDelete}>
                             <span>CANCEL</span>
                             <span class="btn-icon">↩️</span>
                         </button>
+
                         <button class="confirm-btn delete" onclick={confirmDelete}>
                             <span>DELETE ACCOUNT</span>
                             <span class="btn-icon">🗑️</span>
@@ -2460,109 +2348,31 @@ async function addSecret(secret_type){
         </div>
     {/if}
 
-    <!-- PGP Export Modal -->
-    {#if showExportModal}
-        <div class="modal-overlay" onclick={cancelExport}>
-            <div class="modal-container export-modal" onclick={(e) => e.stopPropagation()}>
-                <div class="modal-header">
-                    <h2 class="modal-title">
-                        <span class="modal-icon">🔐</span>
-                        <span>Export Encrypted Backup</span>
-                    </h2>
-                    <button class="modal-close" onclick={cancelExport}>
-                        ×
-                    </button>
-                </div>
-                
-                <div class="modal-body">
-                    <div class="export-content">
-                        <div class="export-info">
-                            <div class="info-section">
-                                <h3>🛡️ Secure PGP Export</h3>
-                                <p>Your data will be encrypted with a passphrase and downloaded as a .pgp file. This backup contains:</p>
-                                <ul>
-                                    <li>All your encrypted secrets</li>
-                                </ul>
-                            </div>
-                            
-                            <div class="warning-section">
-                                <div class="warning-box">
-                                    <span class="warning-icon">⚠️</span>
-                                    <div class="warning-text">
-                                        <strong>Important:</strong> Choose a strong passphrase. If you lose it, the backup cannot be decrypted!
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="export-form">
-                            <div class="form-group">
-                                <label class="form-label">export_passphrase:</label>
-                                <input 
-                                    type="password" 
-                                    class="profile-input" 
-                                    placeholder="enter a strong passphrase for encryption"
-                                    bind:value={exportPassphrase}
-                                    disabled={isExporting}
-                                />
-                            </div>
-                            
-                            <div class="form-group">
-                                <label class="form-label">confirm_passphrase:</label>
-                                <input 
-                                    type="password" 
-                                    class="profile-input" 
-                                    placeholder="confirm your passphrase"
-                                    bind:value={confirmExportPassphrase}
-                                    disabled={isExporting}
-                                />
-                            </div>
-                            
-                            {#if exportPassphrase && confirmExportPassphrase && exportPassphrase !== confirmExportPassphrase}
-                                <div class="error-message">
-                                    <span class="error-icon">⚠</span>
-                                    <span>Passphrases do not match</span>
-                                </div>
-                            {/if}
-                            
-                            {#if exportPassphrase && exportPassphrase.length < 8}
-                                <div class="error-message">
-                                    <span class="error-icon">⚠</span>
-                                    <span>Passphrase must be at least 8 characters long</span>
-                                </div>
-                            {/if}
-                        </div>
-                        
-                        <div class="export-actions">
-                            <button 
-                                class="profile-action-btn secondary" 
-                                onclick={cancelExport}
-                                disabled={isExporting}
-                            >
-                                <span>CANCEL</span>
-                            </button>
-                            <button 
-                                class="profile-action-btn primary" 
-                                onclick={secretsExport}
-                                disabled={!exportPassphrase || !confirmExportPassphrase || exportPassphrase !== confirmExportPassphrase || exportPassphrase.length < 8 || isExporting}
-                            >
-                                {#if isExporting}
-                                    <span>🔄 ENCRYPTING...</span>
-                                {:else}
-                                    <span>🔐 EXPORT & DOWNLOAD</span>
-                                {/if}
-                                <span class="btn-icon">📤</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    {/if}
+    <!-- Export modal removed -->
 </div>
 
 
 <style>
+    .secrets-search {
+        display:flex;
+        align-items:center;
+        gap:12px;
+        margin:10px 0 18px;
+    }
+    .search-input {
+            flex:1;
+            background:#000c;
+            border:1px solid #333;
+            color:#00ff41;
+            padding:10px 12px;
+            border-radius:5px;
+            font-family:'JetBrains Mono', monospace;
+            font-size:.85rem;
+        }
+        .search-input:focus { outline:none; border-color:#00ff41; }
+        .search-empty { font-size:.7rem; color:#888; font-family:'JetBrains Mono', monospace; }
+            .field-error { color:#ff6b6b; font-size:.65rem; margin:4px 0; }
+            .field-error-group { margin:8px 0; display:flex; flex-direction:column; gap:2px; }
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
     :global(body) {
@@ -3318,104 +3128,7 @@ async function addSecret(secret_type){
         font-size: 0.9rem;
     }
 
-    /* Export Modal Styles */
-    .export-modal {
-        max-width: 600px;
-        width: 90vw;
-    }
-
-    .export-content {
-        display: flex;
-        flex-direction: column;
-        gap: 25px;
-    }
-
-    .export-info {
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-    }
-
-    .info-section h3 {
-        color: #00ff41;
-        margin: 0 0 10px 0;
-        font-size: 1.1rem;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .info-section p {
-        color: #ccc;
-        margin: 0 0 15px 0;
-        line-height: 1.4;
-    }
-
-    .info-section ul {
-        color: #aaa;
-        margin: 0;
-        padding-left: 20px;
-    }
-
-    .info-section li {
-        margin-bottom: 5px;
-        line-height: 1.3;
-    }
-
-    .warning-section {
-        margin-top: 15px;
-    }
-
-    .warning-box {
-        background: rgba(255, 193, 7, 0.1);
-        border: 1px solid rgba(255, 193, 7, 0.3);
-        border-radius: 6px;
-        padding: 15px;
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-    }
-
-    .warning-icon {
-        color: #ffc107;
-        font-size: 1.2rem;
-        flex-shrink: 0;
-        margin-top: 2px;
-    }
-
-    .warning-text {
-        color: #ffc107;
-        line-height: 1.4;
-        font-size: 0.9rem;
-    }
-
-    .warning-text strong {
-        color: #fff;
-        font-weight: 600;
-    }
-
-    .export-form {
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-        padding: 20px;
-        background: rgba(0, 0, 0, 0.3);
-        border-radius: 8px;
-        border: 1px solid #333;
-    }
-
-    .export-actions {
-        display: flex;
-        gap: 15px;
-        justify-content: flex-end;
-        padding-top: 20px;
-        border-top: 1px solid #333;
-    }
-
-    .export-actions .profile-action-btn {
-        min-width: 140px;
-        justify-content: center;
-    }
+    /* Export modal styles removed */
 
     .error-icon {
         color: #ff6b6b;
@@ -3977,7 +3690,6 @@ async function addSecret(secret_type){
 
     .warning-message strong {
         color: #fff;
-        background: #ff3b30;
         padding: 1px 5px;
         border-radius: 3px;
     }

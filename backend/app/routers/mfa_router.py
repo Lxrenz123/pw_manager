@@ -1,11 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Cookie, Header
 from app.schemas import user_schema, auth_schema, mfa_schema
-from app.auth import verify_password, create_access_token
 from app.database import PgAsyncSession
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models import user_model
-from datetime import datetime
 from app.twofa import generate_otp_secret, get_provisioning_uri, qrcode_data_url, verifiy_totp 
 from app.auth import get_current_user
 from app.csrf_protection import validate_csrf_token

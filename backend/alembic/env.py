@@ -3,7 +3,8 @@ import os
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
-from dotenv import load_dotenv
+
+
 import sys
 from app.database import Base
 import app.models.user_model 
@@ -13,7 +14,7 @@ import app.models.secret_model
 # access to the values within the .ini file in use.
 config = context.config
 
-load_dotenv()
+
 
 config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL_ALEMBIC"))
 

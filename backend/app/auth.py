@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, HTTPException, status
@@ -42,7 +42,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 def create_access_token(user_id: int):
-    expire = datetime.utcnow() + timedelta(minutes=int(TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(UTC) + timedelta(minutes=int(TOKEN_EXPIRE_MINUTES))
 
     jti = str(uuid.uuid4())
     
@@ -50,7 +50,7 @@ def create_access_token(user_id: int):
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 def create_preauth_token(user_id: int):
-    expire = datetime.utcnow() + timedelta(minutes=int(PREAUTH_TOKEN_EXPIRE))
+    expire = datetime.now(UTC) + timedelta(minutes=int(PREAUTH_TOKEN_EXPIRE))
     jti = str(uuid.uuid4())
     data = {"sub": str(user_id), "2fa": "pending", "exp": expire, "jti": jti}
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
@@ -97,7 +97,6 @@ def verify_preauth_token(preauth_token):
     
     return int(payload.get("sub"))
     
-
 
 def check_pwned_password(password: str):
     hashed_password = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()

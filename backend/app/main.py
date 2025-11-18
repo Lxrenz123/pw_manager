@@ -7,6 +7,19 @@ from app.limiter import limiter
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from fastapi import FastAPI, Request
+
+from app.logger import logger, LogMiddleware, setup_error_logging
+
+##logging test
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+logger = logging.getLogger(__name__)
 
 
 async def generic_error_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
@@ -15,15 +28,21 @@ async def generic_error_handler(request: Request, exc: RateLimitExceeded) -> JSO
         content={"detail": "Too many requests"}
     )
 
-
-
 app = FastAPI(title="Password Manager", root_path="/api")
+app.add_middleware(LogMiddleware)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, generic_error_handler)
 
+
+setup_error_logging(app)
+
+
+app.middleware
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://password123.pw","*"], # * nur für debuggen
+    allow_origins=["https://password123.pw"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field, validator
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime
 
 class CreateUser(BaseModel):
     email: str
