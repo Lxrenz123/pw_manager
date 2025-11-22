@@ -133,51 +133,8 @@
     let secretAttempted = $state(false);
     let visibleSecretErrors = $state([]);
 
-    function sanitizeWhitespace(v) { return v.replace(/\s+/g,' ').trim(); }
-    function limit(v, n) { return v.length > n ? v.slice(0,n) : v; }
 
-    function validateVaultName(name){
-        if(!name) return "";
-        const n = sanitizeWhitespace(name);
-        if(n.length < 3) return "min 3 chars";
-        if(n.length > 64) return "max 64 chars";
-        if(!/^[A-Za-z0-9 _-]+$/.test(n)) return "invalid chars";
-        return "";
-    }
-
-    function validateSecretFields(){
-        const errs = {};
-        const t = sanitizeWhitespace(title);
-        if(!t) errs.title = "required"; else if(t.length>32) errs.title="max 32";
-        if(activeSecretType === 'credential'){
-            const u = sanitizeWhitespace(username);
-            if(!u) errs.username = "required"; else if(u.length>128) errs.username = "max 128";
-            if(!password) errs.password = "required"; else if(password.length<8) errs.password="min 8"; else if(password.length>256) errs.password="max 256";
-            if(url){
-                const up = url.trim();
-                if(up.length>256) errs.url="max 256";
-            }
-            if(note && note.length>2000) errs.note="note max 2000";
-        } else if(activeSecretType === 'note'){
-            if(note && note.length>4000) errs.note="max 4000";
-        } else if(activeSecretType === 'creditcard'){
-            const holder = sanitizeWhitespace(cardHolder);
-            if(!holder) errs.cardHolder="required"; else if(holder.length>128) errs.cardHolder="max 128";
-            const numberDigits = cardNumber.replace(/[^0-9]/g,'');
-            if(!numberDigits) errs.cardNumber="required"; else if(numberDigits.length<13) errs.cardNumber="min 13"; else if(numberDigits.length>19) errs.cardNumber="max 19";
-            if(expiryDate){
-                if(!/^(0[1-9]|1[0-2])\/[0-9]{2}$/.test(expiryDate)) errs.expiryDate="MM/YY";
-            } else errs.expiryDate="required";
-            if(cvv){
-                if(!/^[0-9]{3,4}$/.test(cvv)) errs.cvv="cvv 3-4";
-            } else errs.cvv="required";
-            if(note && note.length>1000) errs.note="note max 1000";
-        }
-        secretErrors = errs;
-    }
-
-    $effect(() => { validateSecretFields(); });
-    $effect(() => { vaultError = validateVaultName(vaultName); });
+ 
 
     function fieldValueByKey(key){
         switch(key){
@@ -468,7 +425,7 @@
     
         const userKeyValue = get(userKey);
         if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
-            localStorage.removeItem("access_token");
+            
             userKey.set(null);
             navigate("/login");
             return;
@@ -584,6 +541,67 @@
         secretId = null;
     }
 
+    // Vault deletion state
+    let showDeleteVaultModal = $state(false);
+    let isDeletingVault = $state(false);
+    let vaultDeleteError = $state("");
+
+    function openDeleteVaultModal() {
+        vaultDeleteError = "";
+        showDeleteVaultModal = true;
+    }
+
+    function cancelDeleteVault() {
+        showDeleteVaultModal = false;
+        vaultDeleteError = "";
+    }
+
+    async function deleteVault() {
+        if (!selectedVaultId) return;
+        isDeletingVault = true;
+        vaultDeleteError = "";
+        try {
+            const response = await fetch(`${apiBase}/vault/${selectedVaultId}`, {
+                method: "DELETE",
+                headers: {
+                    'Content-Type': 'application/json',
+                    'accept': 'application/json',
+                    'X-CSRF-TOKEN': document.cookie.split("=")[1]
+                }
+            });
+
+            if (!response.ok) {
+                try {
+                    const err = await response.json();
+                    vaultDeleteError = err?.detail || "Failed to delete vault";
+                } catch (_) {
+                    vaultDeleteError = "Failed to delete vault";
+                }
+                return;
+            }
+
+            // Remove vault locally
+            const deletedId = selectedVaultId;
+            vaults = vaults.filter(v => v.id !== deletedId);
+
+            // Reset selection and secrets
+            if (vaults.length > 0) {
+                selectedVaultId = vaults[0].id;
+                secrets = [];
+                await getSecretsOfVault(selectedVaultId);
+            } else {
+                selectedVaultId = null;
+                secrets = [];
+            }
+
+            showDeleteVaultModal = false;
+        } catch (_) {
+            vaultDeleteError = "Unexpected error while deleting vault";
+        } finally {
+            isDeletingVault = false;
+        }
+    }
+
     async function deleteSecret(){
         try {
             const response = await fetch(`${apiBase}/secret/${secretId}`, {
@@ -660,7 +678,7 @@ function cancelEditSecret() {
         const userKeyValue = get(userKey);
         if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
          
-            localStorage.removeItem("access_token");
+            
             userKey.set(null);
             navigate("/login");
             return;
@@ -727,7 +745,7 @@ function cancelEditSecret() {
         // Handle crypto-related errors that might indicate session issues
         if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
     
-            localStorage.removeItem("access_token");
+            
             userKey.set(null);
             navigate("/login");
             return;
@@ -735,7 +753,7 @@ function cancelEditSecret() {
         
         if (error.name === 'OperationError' || error.name === 'InvalidAccessError') {
    
-            localStorage.removeItem("access_token");
+            
             userKey.set(null);
             navigate("/login");
             return;
@@ -746,6 +764,25 @@ function cancelEditSecret() {
         isEditingSecret = false;
     }
 }
+
+let sessionExpired = $state(false);
+
+
+
+$effect( () => {
+
+    if (sessionExpired){
+
+        userKey.set(null);
+        navigate("/login");
+    }
+
+}
+
+
+
+)
+
 
     async function deleteMe(){
 
@@ -773,7 +810,7 @@ function cancelEditSecret() {
             return;
         }
 
-        localStorage.removeItem("access_token");
+        
         userKey.set(null);
 
         navigate("/");
@@ -823,6 +860,11 @@ function cancelEditSecret() {
         getVaults();
         // @ts-ignore
         const userKeyValue = get(userKey);
+
+        setTimeout(() => {
+            sessionExpired = true;
+            console.log("session expired");
+            }, 30 * 60 * 1000);
     });
 
 async function getVaults(){
@@ -908,7 +950,7 @@ async function getSecretsOfVault(vaultId){
           // Validate userKey before attempting decryption
           if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
 
-              localStorage.removeItem("access_token");
+              
               userKey.set(null);
               navigate("/login");
               return { ...secret, data: null };
@@ -950,7 +992,7 @@ async function getSecretsOfVault(vaultId){
             // Handle specific crypto errors that indicate session/key issues
             if (err.name === 'TypeError' && err.message.includes('CryptoKey')) {
                 
-                localStorage.removeItem("access_token");
+                
                 userKey.set(null);
                 navigate("/login");
                 return { ...secret, data: null };
@@ -959,7 +1001,7 @@ async function getSecretsOfVault(vaultId){
             // Handle other crypto-related errors that might indicate session issues
             if (err.name === 'OperationError' || err.name === 'InvalidAccessError') {
            
-                localStorage.removeItem("access_token");
+                
                 userKey.set(null);
                 navigate("/login");
                 return { ...secret, data: null };
@@ -1004,13 +1046,13 @@ async function checkCompromise() {
 
 
 
+
 let showcompromiseWarning = $state(false);
 let userIgnoresCompromise = $state(false);
 let compromiseCount = $state(0);
 
     async function addSecret(secret_type){
         secretAttempted = true;
-        validateSecretFields();
         if(Object.keys(secretErrors).length>0) return;
     // Only check for compromised passwords on credentials
     if (secret_type === "credential" && password && !userIgnoresCompromise) {
@@ -1091,7 +1133,7 @@ let compromiseCount = $state(0);
             const userKeyValue = get(userKey);
         if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
 
-            localStorage.removeItem("access_token");
+            
             userKey.set(null);
             navigate("1");
             return;
@@ -1186,7 +1228,7 @@ let compromiseCount = $state(0);
         
         if (error.name === 'OperationError' || error.name === 'InvalidAccessError') {
   
-            localStorage.removeItem("access_token");
+            
             userKey.set(null);
             navigate("/login");
             return;
@@ -1251,7 +1293,8 @@ let compromiseCount = $state(0);
                 <input 
                     class="vault-input" 
                     placeholder="vault_name" 
-                    bind:value={vaultName} 
+                    bind:value={vaultName}
+                    maxlength=64
                 />
                 {#if vaultError}
                     <div class="field-error">{vaultError}</div>
@@ -1287,11 +1330,13 @@ let compromiseCount = $state(0);
                                 placeholder="secret_title" 
                                 class="sidebar-input" 
                                 bind:value={title} 
+                                maxlength=64
                             />
                             <input 
                                 placeholder="username" 
                                 class="sidebar-input" 
-                                bind:value={username} 
+                                bind:value={username}
+                                maxlength=256
                             />
                             <div class="password-input-section">
                                 <input 
@@ -1299,6 +1344,7 @@ let compromiseCount = $state(0);
                                     type={showPasswordInForm ? 'text' : 'password'}
                                     class="sidebar-input" 
                                     bind:value={password} 
+                                    maxlength=256
                                 />
                                 <div class="password-buttons">
                                     <button 
@@ -1334,12 +1380,14 @@ let compromiseCount = $state(0);
                                 placeholder="website_url (optional)" 
                                 class="sidebar-input" 
                                 bind:value={url} 
+                                maxlength=2083
                             />
                             <textarea 
                                 placeholder="additional_notes (optional)" 
                                 class="sidebar-textarea" 
                                 bind:value={note}
                                 rows="2"
+                                maxlength=512
                             ></textarea>
                             
                             {#if showcompromiseWarning}
@@ -1382,12 +1430,16 @@ let compromiseCount = $state(0);
                                 placeholder="secret_title" 
                                 class="sidebar-input" 
                                 bind:value={title} 
+                                maxlength=32
+                                milength=1
                             />
                             <textarea 
                                 placeholder="note_content" 
                                 class="sidebar-textarea" 
                                 bind:value={note}
                                 rows="3"
+                                maxlength=32
+                                milength=1
                             ></textarea>
                             {#if visibleSecretErrors.length>0}
                                 <div class="field-error-group">
@@ -1414,13 +1466,17 @@ let compromiseCount = $state(0);
                             <input 
                                 placeholder="cardholder_name" 
                                 class="sidebar-input" 
-                                bind:value={cardHolder} 
+                                bind:value={cardHolder}
+                                maxlength=32
+       
                             />
                             <input 
                                 placeholder="card_number" 
                                 class="sidebar-input" 
                                 bind:value={cardNumber} 
                                 maxlength="19"
+    
+    
                             />
                             <div class="card-details-row">
                                 <input 
@@ -1440,13 +1496,15 @@ let compromiseCount = $state(0);
                             <input 
                                 placeholder="bank_name (optional)" 
                                 class="sidebar-input" 
-                                bind:value={bankName} 
+                                bind:value={bankName}
+                                maxlength=64 
                             />
                             <textarea 
                                 placeholder="additional_notes (optional)" 
                                 class="sidebar-textarea" 
                                 bind:value={note}
                                 rows="2"
+                                maxlength=512
                             ></textarea>
                             {#if visibleSecretErrors.length>0}
                                 <div class="field-error-group">
@@ -1562,6 +1620,7 @@ let compromiseCount = $state(0);
                                     type="password" 
                                     class="profile-input" 
                                     placeholder="enter current master password"
+                                    maxlength=64
                                 />
                             </div>
                             <div class="form-group">
@@ -1581,6 +1640,7 @@ let compromiseCount = $state(0);
                                     class:invalid={newEmail && !isValidEmail(newEmail.trim())}
                                     placeholder="new.email@domain.com"
                                     bind:value={newEmail}
+                                    maxlength=320
                                 />
                                 {#if newEmail && !isValidEmail(newEmail.trim())}
                                     <div class="field-error">
@@ -1624,7 +1684,7 @@ let compromiseCount = $state(0);
                                     type="password" 
                                     class="profile-input" 
                                     placeholder="enter current master password"
-                                
+                                    maxlength=64
                                 />
                             </div>
                             <div class="form-group">
@@ -1634,6 +1694,7 @@ let compromiseCount = $state(0);
                                     type="password" 
                                     class="profile-input" 
                                     placeholder="enter new master password"
+                                    maxlength=64
                                 />
                             </div>
                             <div class="form-group">
@@ -1643,6 +1704,7 @@ let compromiseCount = $state(0);
                                     type="password" 
                                     class="profile-input" 
                                     placeholder="confirm new master password"
+                                    maxlength=64
                                 />
                             </div>
                             
@@ -1690,6 +1752,11 @@ let compromiseCount = $state(0);
                     <div class="vault-status">
                         <span class="status-indicator">●</span>
                         <span>VAULT DECRYPTED</span>
+                        <button class="vault-delete-btn" onclick={openDeleteVaultModal} disabled={!selectedVaultId} title="Delete this vault and all its secrets">
+                            <span class="btn-icon">🗑️</span>
+                            <span>DELETE VAULT</span>
+                        </button>
+
                     </div>
                 </div>
 
@@ -1901,6 +1968,7 @@ let compromiseCount = $state(0);
                                         type="text" 
                                         class="edit-input" 
                                         bind:value={editedSecretData.title}
+                                        maxlength="32"
                                         placeholder="Secret title"
                                     />
                                 </div>
@@ -1910,6 +1978,7 @@ let compromiseCount = $state(0);
                                         type="text" 
                                         class="edit-input" 
                                         bind:value={editedSecretData.username}
+                                        maxlength="128"
                                         placeholder="Username"
                                     />
                                 </div>
@@ -1919,6 +1988,7 @@ let compromiseCount = $state(0);
                                         type="password" 
                                         class="edit-input" 
                                         bind:value={editedSecretData.password}
+                                        maxlength="256"
                                         placeholder="Password"
                                     />
                                 </div>
@@ -1928,6 +1998,7 @@ let compromiseCount = $state(0);
                                         type="url" 
                                         class="edit-input" 
                                         bind:value={editedSecretData.url}
+                                        maxlength="256"
                                         placeholder="Website URL (optional)"
                                     />
                                 </div>
@@ -1937,6 +2008,7 @@ let compromiseCount = $state(0);
                                         class="edit-textarea" 
                                         bind:value={editedSecretData.note}
                                         placeholder="Additional notes (optional)"
+                                        maxlength="2000"
                                         rows="3"
                                     ></textarea>
                                 </div>
@@ -1951,6 +2023,7 @@ let compromiseCount = $state(0);
                                         type="text" 
                                         class="edit-input" 
                                         bind:value={editedSecretData.title}
+                                        maxlength="32"
                                         placeholder="Note title"
                                     />
                                 </div>
@@ -1960,6 +2033,7 @@ let compromiseCount = $state(0);
                                         class="edit-textarea" 
                                         bind:value={editedSecretData.content}
                                         placeholder="Note content"
+                                        maxlength="4000"
                                         rows="6"
                                     ></textarea>
                                 </div>
@@ -1974,6 +2048,7 @@ let compromiseCount = $state(0);
                                         type="text" 
                                         class="edit-input" 
                                         bind:value={editedSecretData.title}
+                                        maxlength="32"
                                         placeholder="Card title"
                                     />
                                 </div>
@@ -1983,6 +2058,7 @@ let compromiseCount = $state(0);
                                         type="text" 
                                         class="edit-input" 
                                         bind:value={editedSecretData.cardHolder}
+                                        maxlength="128"
                                         placeholder="Cardholder name"
                                     />
                                 </div>
@@ -2024,6 +2100,7 @@ let compromiseCount = $state(0);
                                         type="text" 
                                         class="edit-input" 
                                         bind:value={editedSecretData.bankName}
+                                        maxlength="128"
                                         placeholder="Bank name (optional)"
                                     />
                                 </div>
@@ -2033,6 +2110,7 @@ let compromiseCount = $state(0);
                                         class="edit-textarea" 
                                         bind:value={editedSecretData.note}
                                         placeholder="Additional notes (optional)"
+                                        maxlength="1000"
                                         rows="3"
                                     ></textarea>
                                 </div>
@@ -2098,6 +2176,7 @@ let compromiseCount = $state(0);
                                 placeholder="enter your master password"
                                 bind:value={confirmMasterPW}
                                 autocomplete="current-password"
+                                maxlength=64
                             />
                         </div>
                     </div>
@@ -2165,6 +2244,54 @@ let compromiseCount = $state(0);
                             <button class="confirm-btn delete" onclick={deleteSecret}>
                                 <span>DELETE SECRET</span>
                                 <span class="btn-icon">🗑️</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    <!-- Delete Vault Confirmation Modal -->
+    {#if showDeleteVaultModal}
+        <div class="modal-overlay" onclick={cancelDeleteVault}>
+            <div class="modal-container confirm-modal" onclick={(e) => e.stopPropagation()}>
+                <div class="modal-header">
+                    <h2 class="modal-title">
+                        <span class="modal-icon">🗑️</span>
+                        <span>Delete Vault</span>
+                    </h2>
+                    <button class="modal-close" onclick={cancelDeleteVault}>
+                        ×
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="warning-content">
+                        <div class="warning-message">
+                            <span class="warning-icon">⚠️</span>
+                            <div class="warning-text">
+                                <h3>Are you sure you want to delete this vault?</h3>
+                                <p>
+                                    <strong>Vault:</strong> {vaults.find(v => v.id === selectedVaultId)?.name || 'Unknown'}
+                                </p>
+                                <p>This action will permanently delete the vault and <strong>all its secrets</strong>.</p>
+                            </div>
+                        </div>
+                        {#if vaultDeleteError}
+                            <div class="error-message">
+                                <span class="error-icon">⚠</span>
+                                <span>{vaultDeleteError}</span>
+                            </div>
+                        {/if}
+                        <div class="confirm-actions">
+                            <button class="confirm-btn cancel" onclick={cancelDeleteVault} disabled={isDeletingVault}>
+                                <span>CANCEL</span>
+                                <span class="btn-icon">↩️</span>
+                            </button>
+                            <button class="confirm-btn delete" onclick={deleteVault} disabled={isDeletingVault}>
+                                <span>{isDeletingVault ? 'DELETING...' : 'DELETE VAULT'}</span>
+                                <span class="btn-icon">{isDeletingVault ? '⏳' : '🗑️'}</span>
                             </button>
                         </div>
                     </div>
@@ -2695,6 +2822,43 @@ let compromiseCount = $state(0);
     .status-indicator {
         color: #00ff41;
         animation: pulse 2s infinite;
+    }
+
+    /* Vault delete button next to status */
+    .vault-delete-btn {
+        background: linear-gradient(45deg, #ff6b6b, #ff5252);
+        border: none;
+        color: #fff;
+        padding: 6px 10px;
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: 10px;
+    }
+
+    .vault-delete-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 10px rgba(255, 107, 107, 0.3);
+    }
+
+    .vault-delete-btn:disabled {
+        background: rgba(255, 107, 107, 0.3);
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+
+    .vault-delete-warning {
+        color: #ff6b6b;
+        font-size: 0.75rem;
+        margin-left: 6px;
+        opacity: 0.8;
     }
 
     @keyframes pulse {

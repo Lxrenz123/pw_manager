@@ -18,5 +18,5 @@ class User(Base):
 
     user_key: Mapped[str] = mapped_column(String, nullable=False) 
     salt: Mapped[str] = mapped_column(String, nullable=False) 
-    iv: Mapped[str] = mapped_column(String, nullable=False)
+    iv: Mapped[str] = mapped_column(String, nullable=False) 
     vault: Mapped[List["Vault"]] = relationship(back_populates="owner", cascade="all, delete-orphan")

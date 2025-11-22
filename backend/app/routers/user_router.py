@@ -37,7 +37,7 @@ async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSessi
 
     times_pwned = check_pwned_password(user_create.password)
     if times_pwned != 0:
-        raise HTTPException(status_code=400, detail=f"Your password has been seen {times_pwned} times before in data breaches, please choose a different password")
+        raise HTTPException(status_code=400, detail=f"Your password has been seen {times_pwned} times in data breaches, please choose a different password")
     
 
     
@@ -128,7 +128,7 @@ async def update_password(request: Request, session: PgAsyncSession, update_data
 
     times_pwned = check_pwned_password(update_data.password)
     if times_pwned != 0:
-        raise HTTPException(status_code=400, detail=f"Your password has been seen {times_pwned} times before in data breaches, please choose a different password")
+        raise HTTPException(status_code=400, detail=f"Your password has been seen {times_pwned} times in data breaches, please choose a different password")
     
 
     

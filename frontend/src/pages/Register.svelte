@@ -2,18 +2,35 @@
     import { apiBase } from "../script/api-base-url";
     import { deriveKey } from "../script/crypto.js";
 
-    let email = "";
-    let password = "";
-    let confirmPassword = "";
-    let user_key;
+    let email = $state("");
+    let password = $state("");
+    let confirmPassword = $state("");
     let result = $state("");
     let isSuccess = false;
 
 
+    let invalidInput = $state(false);
 
+    $effect(() => {
+
+        if (email.length > 320 || password.length > 64 || confirmPassword.length > 64) {
+  
+            invalidInput = true
+        } 
+        else {
+
+            invalidInput = false
+        }
+
+    });
 
 
 async function register(){
+
+    if (invalidInput == true) {
+         result = "Invalid input"
+         return
+    }
     // Reset previous messages
     result = "";
     isSuccess = false;
@@ -57,6 +74,11 @@ async function register(){
         });
 
         const data = await response.json();
+        
+        if (response.status == 422){
+            result = "422 Unprocessable Content"
+            return
+        }
 
         if (!response.ok){
             result = data.detail;
@@ -135,21 +157,9 @@ async function register(){
             inset 0 0 20px rgba(0, 170, 255, 0.05);
         backdrop-filter: blur(10px);
         position: relative;
-        animation: glowPulse 2s ease-in-out infinite alternate;
+        /* Removed animated glow pulse for static background */
     }
 
-    @keyframes glowPulse {
-        from {
-            box-shadow: 
-                0 0 30px rgba(0, 170, 255, 0.3),
-                inset 0 0 20px rgba(0, 170, 255, 0.05);
-        }
-        to {
-            box-shadow: 
-                0 0 40px rgba(0, 170, 255, 0.5),
-                inset 0 0 30px rgba(0, 170, 255, 0.1);
-        }
-    }
 
     .header {
         text-align: center;
@@ -208,7 +218,7 @@ async function register(){
     .form-group {
         margin-bottom: 25px;
     }
-
+ 
     .label {
         display: block;
         margin-bottom: 8px;
@@ -285,6 +295,18 @@ async function register(){
         transform: translateY(0);
     }
 
+    /* Greyed-out style when the button is disabled */
+    .submit-btn:disabled {
+        opacity: 0.5;
+        filter: grayscale(100%);
+        cursor: not-allowed;
+        pointer-events: none;
+        background: linear-gradient(45deg, #555, #444);
+        color: #aaa;
+        box-shadow: none;
+        transform: none;
+    }
+
     .btn-arrow {
         font-size: 1.2rem;
         transition: transform 0.3s ease;
@@ -319,24 +341,9 @@ async function register(){
         color: #ff6b6b;
     }
 
-    /* Scanning effect */
-    .register-container::before {
-        content: '';
-        position: absolute;
-        top: -2px;
-        left: -2px;
-        right: -2px;
-        bottom: -2px;
-        background: linear-gradient(45deg, transparent 30%, rgba(0, 170, 255, 0.1) 50%, transparent 70%);
-        border-radius: 10px;
-        animation: scanEffect 3s linear infinite;
-        z-index: -1;
-    }
+    /* Removed scanning effect overlay for static background */
 
-    @keyframes scanEffect {
-        0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
-        100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
-    }
+
 </style>
 
 <main>
@@ -370,6 +377,7 @@ async function register(){
                     bind:value={email}
                     class="input"
                     required
+                    maxlength=320
                 />
             </div>
 
@@ -386,6 +394,7 @@ async function register(){
                     class="input"
                     required
                     minlength="8"
+                    maxlength=64
                 />
             </div>
 
@@ -402,6 +411,7 @@ async function register(){
                     class="input"
                     required
                     minlength="8"
+                    maxlength=64
                 />
                 <div class="password-help">
                     <span class="help-text">
@@ -410,8 +420,8 @@ async function register(){
                 </div>
             </div>
 
-            <button type="submit" class="submit-btn">
-                <span class="btn-text">./REGISTER_USER.sh</span>
+            <button type="submit" class="submit-btn" disabled={invalidInput}>
+                <span class="btn-text" >./REGISTER_USER.sh</span>
                 <span class="btn-arrow">→</span>
             </button>
         </form>

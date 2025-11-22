@@ -1,12 +1,13 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, validator, StringConstraints
 from datetime import datetime
+from typing import Annotated
 
 class CreateUser(BaseModel):
-    email: str
-    password: str
-    user_key: str  # base64 encoded
-    salt: str      # base64 encoded
-    iv: str        # base64 encoded
+    email: Annotated[str, StringConstraints(max_length=320)]
+    password: Annotated[str, StringConstraints(min_length=8, max_length=128)]
+    user_key: Annotated[str, StringConstraints(max_length=64)]  # base64 encoded
+    salt: Annotated[str, StringConstraints(max_length=24)]      # base64 encoded
+    iv: Annotated[str, StringConstraints( max_length=16)]       # base64 encoded
 
     class Config:
         orm_mode = True  
@@ -52,14 +53,14 @@ class User(BaseModel):
     email: str
 
 class UpdateUserEmail(BaseModel):
-    password: str
-    email: str
+    password: Annotated[str, StringConstraints(min_length=8, max_length=128)]
+    email: Annotated[str, StringConstraints(max_length=320)]
 
 class UpdateUserPassword(BaseModel):
-    current_password: str
-    password: str
+    current_password: Annotated[str, StringConstraints(min_length=8, max_length=128)]
+    password: Annotated[str, StringConstraints(min_length=8, max_length=128)]
     user_key: str
     iv: str
 
 class UserDelete(BaseModel):
-    password: str
+    password: Annotated[str, StringConstraints(min_length=8, max_length=128)]

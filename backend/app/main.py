@@ -33,8 +33,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://password123.pw"], 
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["POST", "PATCH", "DELETE", "GET"],
+    allow_headers=["X-CSRF-TOKEN", "Content-Type", "accept"],
 )
 
 

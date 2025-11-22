@@ -35,6 +35,12 @@
 
         const data = await response.json();
 
+
+        if (response.status == 422){
+            result = "422 Unprocessable Content"
+            return
+        }
+
         if (!response.ok){
 
             result = data.detail || "2FA verification failed";
@@ -85,6 +91,11 @@
 
         const data = await response.json();
         
+        if (response.status == 422){
+            result = "422 Unprocessable Content"
+            return
+        }
+
         if (!response.ok){
 
             // Ensure result is always a string
@@ -175,6 +186,7 @@ window.onRecaptchaSuccess = function (token) {
                         bind:value={email}
                         class="input"
                         required
+                        maxlength=320
                     />
                 </div>
 
@@ -190,6 +202,7 @@ window.onRecaptchaSuccess = function (token) {
                         bind:value={password}
                         class="input"
                         required
+                        maxlength=64
                     />
                 </div>
                 
@@ -315,18 +328,7 @@ window.onRecaptchaSuccess = function (token) {
         animation: glowPulse 2s ease-in-out infinite alternate;
     }
 
-    @keyframes glowPulse {
-        from {
-            box-shadow: 
-                0 0 30px rgba(0, 255, 65, 0.3),
-                inset 0 0 20px rgba(0, 255, 65, 0.05);
-        }
-        to {
-            box-shadow: 
-                0 0 40px rgba(0, 255, 65, 0.5),
-                inset 0 0 30px rgba(0, 255, 65, 0.1);
-        }
-    }
+
 
     .header {
         text-align: center;
@@ -473,16 +475,6 @@ window.onRecaptchaSuccess = function (token) {
         animation: slideIn 0.5s ease-out;
     }
 
-    @keyframes slideIn {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
 
     .mfa-header {
         text-align: center;
@@ -504,17 +496,6 @@ window.onRecaptchaSuccess = function (token) {
     .mfa-icon {
         font-size: 1.3rem;
         animation: pulse 2s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-        0%, 100% { 
-            transform: scale(1);
-            opacity: 1;
-        }
-        50% { 
-            transform: scale(1.1);
-            opacity: 0.8;
-        }
     }
 
     .mfa-subtitle {
@@ -646,10 +627,7 @@ window.onRecaptchaSuccess = function (token) {
         z-index: -1;
     }
 
-    @keyframes matrixScan {
-        0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
-        100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
-    }
+
 </style>
 
 

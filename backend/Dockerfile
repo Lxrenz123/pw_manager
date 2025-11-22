@@ -12,9 +12,7 @@ RUN useradd -m appuser
 
 COPY ./app /code/app
 
-COPY ./alembic /code/alembic
 
-COPY ./alembic.ini /code/
 
 RUN chown -R appuser:appuser /code
 

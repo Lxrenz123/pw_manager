@@ -1,12 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 from datetime import datetime
+from typing import Annotated
 
 class CreateVault(BaseModel):
-    name: str
+    name: Annotated[str, StringConstraints(min_length=1, max_length=64)]
 
 
 class UpdateVault(BaseModel):
-    name: str
+    name: Annotated[str, StringConstraints(min_length=1, max_length=64)]
 
 class GetVault(BaseModel):
     name: str

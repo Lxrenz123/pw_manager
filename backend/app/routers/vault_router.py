@@ -78,7 +78,7 @@ async def delete_vault(session: PgAsyncSession, vault_id: int, user: user_model.
     vault = result.scalar_one_or_none()
 
     if not vault:
-        raise HTTPException(status_code=404, detail="Vault not found or not yours")
+        raise HTTPException(status_code=404, detail="Vault not found")
 
     await session.delete(vault)   
     await session.commit()

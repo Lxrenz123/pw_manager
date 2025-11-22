@@ -29,6 +29,9 @@ def validate_csrf_token(csrf_token_header: str, csrf_token_cookie: Optional[str]
     if csrf_token_header != csrf_token_cookie:
         raise HTTPException(status_code=403, detail="Missing csrf token!")
     
+    if not hmac.compare_digest(csrf_token_header, csrf_token_cookie):
+        raise HTTPException(status_code=403, detail="CSRF token mismatch")
+    
     try:
         value, signature = csrf_token_cookie.split(":")
     except ValueError:
