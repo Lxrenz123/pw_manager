@@ -57,12 +57,12 @@ def create_preauth_token(user_id: int):
 
 async def get_current_user(token: str = Depends(get_token_from_cookie), session: AsyncSession = Depends(get_db)):
 
-    error = HTTPException(status_code=401, detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"})
+    error = HTTPException(status_code=401, detail="Could not validate credentials")
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired", headers={"WWW-Authenticate": "Bearer"},)
+        raise HTTPException(status_code=401, detail="Token expired")
     except JWTError:
         raise error
     
@@ -104,7 +104,7 @@ def check_pwned_password(password: str):
     prefix = hashed_password[:5]
     suffix = hashed_password[5:]
 
-    response = requests.get(f"https://api.pwnedpasswords.com/range/{prefix}")
+    response = requests.get(f"https://api.pwnedpasswords.com/range/{prefix}", timeout=5)
     if response.status_code != 200:
         raise RuntimeError("Error fetching data from pwned API")
 

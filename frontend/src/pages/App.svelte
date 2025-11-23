@@ -93,32 +93,43 @@
         const key = $userKey; 
 
         if (!key) {
+            logout()
             navigate("/login");
             logout()
         }
     });
 
-    // Install a global fetch interceptor once to catch auth/csrf failures and redirect
+   
     function initFetchInterceptor(){
         if (typeof window === 'undefined' || window.__fetchPatched) return;
         const originalFetch = window.fetch.bind(window);
-        window.fetch = async (...args) => {
-            const response = await originalFetch(...args);
-            try {
-                // Only inspect JSON responses
-                const ct = response.headers.get('content-type') || '';
-                if (ct.includes('application/json')) {
-                    const data = await response.clone().json();
-                    if (data?.detail === MISSING_ACCESS_TOKEN_DETAIL || data?.detail === MISSING_CSRF_TOKEN_DETAIL) {
-                        try { localStorage.removeItem('access_token'); } catch {}
-                        userKey.set(null);
+        const AUTO_LOGOUT_DETAILS = new Set([
+        "Missing access token!",
+        "Missing csrf token!",
+        "Invalid CSRF token signature",
+        "Could not validate credentials"
+    ]);
+    window.fetch = async (...args) => {
+        const response = await originalFetch(...args);
+        try {
+            const ct = response.headers.get('content-type') || '';
+            if (ct.includes('application/json')) {
+                const data = await response.clone().json();
+                if (data?.detail && AUTO_LOGOUT_DETAILS.has(data.detail)) {
+                    // Avoid looping if we’re already hitting logout endpoint
+                    const reqUrl = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+                    try { localStorage.removeItem('access_token'); } catch {}
+                    userKey.set(null);
+                    if (!reqUrl.includes('/user/logout')) {
+             
                         navigate('/login');
                     }
                 }
-            } catch(_) { /* ignore parse errors */ }
-            return response;
-        };
-        window.__fetchPatched = true;
+            }
+        } catch(_) { /* ignore parse errors */ }
+        return response;
+    };
+    window.__fetchPatched = true;
     }
     
     // Email validation function
@@ -213,7 +224,6 @@
         }
     }
     function generateSecurePassword() {
-        console.log(document.cookie);
         isGeneratingPassword = true;
         
      
@@ -396,6 +406,7 @@
             passwordUpdateSuccess = ""
 
         },3000);
+        errorstatePW = "";
         
         currentPW = "";
         newPW = "";
@@ -442,8 +453,7 @@
         }});
 
         if (!response.ok){
-            throw new Error("Error");
-            // @ts-ignore
+
             return;
         }
 
@@ -475,8 +485,7 @@
         }});
 
         if (!response.ok){
-            throw new Error("Error");
-            // @ts-ignore
+
             return;
         }
 
@@ -508,8 +517,7 @@
     });
 
         if (!response.ok){
-            throw new Error("Error");
-            // @ts-ignore
+
             return;
         }
 
@@ -614,7 +622,7 @@
             });
 
             if (!response.ok){
-                throw new Error("Failed to delete secret");
+                return
             }
 
             // Remove the secret from the local array
@@ -722,7 +730,7 @@ function cancelEditSecret() {
         });
 
         if (!response.ok) {
-            throw new Error("Failed to update secret");
+            return
         }
 
         // Update the secret in the local array
@@ -771,7 +779,7 @@ let sessionExpired = $state(false);
 
 $effect( () => {
 
-    if (sessionExpired){
+    if (sessionExpired){    
 
         userKey.set(null);
         navigate("/login");
@@ -779,9 +787,9 @@ $effect( () => {
 
 }
 
-
-
 )
+
+
 
 
     async function deleteMe(){
@@ -863,7 +871,6 @@ $effect( () => {
 
         setTimeout(() => {
             sessionExpired = true;
-            console.log("session expired");
             }, 30 * 60 * 1000);
     });
 
@@ -880,8 +887,7 @@ async function getVaults(){
     vaults = await response.json();
     
     if (!response.ok){
-        throw new Error("Network error");
-        // @ts-ignore
+    
         return;
     }
 
@@ -906,8 +912,8 @@ async function addVault(){
         body: JSON.stringify({name: vaultName.trim()})
     });
     if (!response.ok){
-        throw new Error("Network error");
-        return;
+
+        return
     }
     const newVault = await response.json();
     vaults.push(newVault);
@@ -928,8 +934,7 @@ async function getSecretsOfVault(vaultId){
     })
 
     if (!response.ok){
-        throw new Error("Network error");
-        // @ts-ignore
+
         return;
     }
     const encryptedSecrets = await response.json(); 
@@ -1030,7 +1035,7 @@ async function checkCompromise() {
     const suffix = hashHex.slice(5);
 
     const result = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`);
-    if (!result.ok) throw new Error('Error fetching data from pwned API');
+    if (!result.ok) return;
 
     const body = await result.text();
     for (const line of body.split(/\r?\n/)) {
@@ -1179,8 +1184,7 @@ let compromiseCount = $state(0);
     })
 
     if (!response.ok){
-        throw new Error("Network error");
-        // @ts-ignore
+
         return;
     }
 
@@ -3074,6 +3078,7 @@ let compromiseCount = $state(0);
     .action-btn:hover {
         background: rgba(0, 255, 65, 0.2);
         transform: translateY(-1px);
+        box-shadow: 0 3px 10px rgba(0, 255, 65, 0.3);
     }
 
     .download-btn:hover {
@@ -3266,6 +3271,7 @@ let compromiseCount = $state(0);
     .field-value {
         color: #00ff41;
         font-size: 0.9rem;
+        font-weight: 500;
         word-break: break-all;
     }
 
@@ -3524,7 +3530,7 @@ let compromiseCount = $state(0);
     }
 
     .step-content li {
-        margin-bottom: 3px;
+        margin-bottom: 5px;
     }
 
     .security-note {
@@ -3733,7 +3739,7 @@ let compromiseCount = $state(0);
         color: #ff6b6b;
         font-size: 1.1rem;
         margin: 0 0 10px 0;
-        font-weight: 600;
+        font-weight: 700;
     }
 
     .warning-text p {
@@ -4242,34 +4248,23 @@ let compromiseCount = $state(0);
     flex-shrink: 0;
 }
 
-.warning-text h3 {
+.warning-title {
     color: #ff6b6b;
-    font-size: 1.1rem;
-    margin: 0 0 15px 0;
+    font-size: 0.85rem;
     font-weight: 700;
 }
 
-.warning-text p {
-    color: #888;
-    font-size: 0.9rem;
-    margin: 0 0 15px 0;
+.warning-message {
+    color: #ffaaaa;
+    font-size: 0.8rem;
+    margin: 0 0 10px 0;
     line-height: 1.4;
 }
 
-.warning-text ul {
-    color: #888;
-    font-size: 0.9rem;
-    margin: 0 0 15px 0;
-    padding-left: 20px;
-}
-
-.warning-text li {
-    margin-bottom: 5px;
-}
-
-.warning-text strong {
-    color: #ff6b6b;
-    font-weight: 700;
+.warning-message strong {
+    color: #fff;
+    padding: 1px 5px;
+    border-radius: 3px;
 }
 
 .confirm-actions {
@@ -5001,8 +4996,7 @@ let compromiseCount = $state(0);
 
 .toggle-password-btn:hover {
     background: rgba(255, 193, 7, 0.2);
-    transform: translateY(-1px);
-    box-shadow: 0 3px 10px rgba(255, 193, 7, 0.3);
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
 }
 .toggle-password-btn:disabled {
     background-color: #333 !important;

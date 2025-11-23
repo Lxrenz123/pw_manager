@@ -98,12 +98,12 @@ async def login(response: Response, session: PgAsyncSession, credentials: auth_s
 
 @router.post("/2fa-verify", response_model=auth_schema.AuthResponse)
 @limiter.limit("3/minute")
-async def verify_2fa(response: Response, request: Request,session: PgAsyncSession, mfadata: mfa_schema.Verify):
-    
-    if not verify_preauth_token(mfadata.preauth_token):
-        raise HTTPException(status_code=400, detail="Invalid Token")
+async def verify_2fa(response: Response, request: Request, session: PgAsyncSession, mfadata: mfa_schema.Verify):
     
     user_id = verify_preauth_token(mfadata.preauth_token)
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid Token")
 
     stmt = select(user_model.User).where(user_model.User.id == user_id)
     result = await session.execute(stmt)

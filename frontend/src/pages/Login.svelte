@@ -6,6 +6,9 @@
     import { loginCrypto } from "../script/crypto.js";
     import { onMount } from "svelte";
 
+    let v3Key = "6Lecuw0sAAAAAJqVrcsGz6wpPgEA85xP3t-8fmoy"
+    let v2Key = "6Let2dkrAAAAAOIyWGyaDiN0lfPEEaiP08fP4A2W"
+
     
     let preauth_token;
     let userData;
@@ -14,7 +17,7 @@
     let showReCaptcha_v2 = $state(false);
       onMount(() => {
     const script = document.createElement("script");
-    script.src = "https://www.google.com/recaptcha/api.js?render=6Lecuw0sAAAAAJqVrcsGz6wpPgEA85xP3t-8fmoy";
+    script.src = `https://www.google.com/recaptcha/api.js?render=${v3Key}`;
     script.async = true;
     script.defer = true;
     document.head.appendChild(script);
@@ -69,7 +72,7 @@
 
     try {
         // @ts-ignore
-        const v3token = await window.grecaptcha.execute("6Lecuw0sAAAAAJqVrcsGz6wpPgEA85xP3t-8fmoy", { action: "login"});
+        const v3token = await window.grecaptcha.execute(v3Key, { action: "login"});
 
         if (showReCaptcha_v2){
 
@@ -114,7 +117,6 @@
             }
         }
 
-            throw new Error("Failed");
             return;
         }
 
@@ -212,7 +214,7 @@ window.onRecaptchaSuccess = function (token) {
                     <div class="recaptcha-widget-container">
                         <div 
                             class="g-recaptcha"
-                            data-sitekey="6Let2dkrAAAAAOIyWGyaDiN0lfPEEaiP08fP4A2W"
+                            data-sitekey={v2Key}
                             data-callback="onRecaptchaSuccess">
                         </div>
                     </div>
