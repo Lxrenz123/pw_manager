@@ -32,9 +32,34 @@ let v2Key = "..."
 ```bash
 cd backend/
 ```
-
+### .ENV Template
 Create `.env` in `backend/`.
+- make sure to adjust these values
+```bash
+JWT_SECRET_KEY=""
+ALGORITHM = "HS256"
+JWT_TOKEN_EXPIRE = 300
+DATABASE_URL = "postgresql+asyncpg://user:password@postgres:5432/pw_manager_db"
+DATABASE_URL_ALEMBIC = "postgresql+psycopg2://user:password@localhost:5432/pw_manager_db"
+PREAUTH_TOKEN_EXPIRE = 2
 
+RECAPTCHA_SECRET_KEY = "" 
+
+RECAPTCHAV2_SECRET_KEY = ""
+
+
+#DATABASE CONTAINER
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=""
+POSTGRES_DATABASE=pw_manager_db
+
+#CSRF HMAC
+CSRF_HMAC_SECRET=""
+
+
+
+
+```
 Add Postgres user that is non-root and make sure it matches with database URL in `.env` and Alembic URL.
 
 ```bash
