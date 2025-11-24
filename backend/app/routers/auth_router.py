@@ -12,7 +12,7 @@ from app.recaptcha import verify_recaptchav3, verify_recaptchav2
 from app.limiter import limiter
 from app.csrf_protection import create_csrf_token, csrf_error
 from app.logger import logger
-
+from uuid import UUID
 
 domain = "password123.pw"
 
@@ -71,10 +71,17 @@ async def login(response: Response, session: PgAsyncSession, credentials: auth_s
     await session.commit()
     await session.refresh(user)
 
-  
+
+
+    await cookiesetter(response=response, user_id=user.id) 
+
+    request.state.user = user
+    return auth_response
+
+async def cookiesetter(response: object, user_id: UUID):
     response.set_cookie(
         key="access_token",
-        value=f"{create_access_token(user.id)}",
+        value=f"{create_access_token(user_id)}",
         httponly=True,      
         secure=True,        
         samesite="strict",     
@@ -93,8 +100,6 @@ async def login(response: Response, session: PgAsyncSession, credentials: auth_s
         domain=domain
     )
 
-    request.state.user = user
-    return auth_response
 
 @router.post("/2fa-verify", response_model=auth_schema.AuthResponse)
 @limiter.limit("3/minute")
@@ -130,27 +135,7 @@ async def verify_2fa(response: Response, request: Request, session: PgAsyncSessi
     await session.commit()
     await session.refresh(user)
 
-    response.set_cookie(
-        key="access_token",
-        value=f"{create_access_token(user.id)}",
-        httponly=True,      
-        secure=True,        
-        samesite="strict",     
-        max_age=1800,       
-        path="/",           
-        domain=domain
-    )
-    response.set_cookie(
-        key="csrf_token",
-        value=create_csrf_token(),
-        httponly=False,      
-        secure=True,        
-        samesite="strict",     
-        max_age=1800,       
-        path="/",           
-        domain=domain
-    )
-
+    await cookiesetter(response=response, user_id=user.id)
 
     return auth_response
 

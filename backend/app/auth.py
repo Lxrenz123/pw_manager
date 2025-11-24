@@ -15,7 +15,7 @@ import requests
 import os
 import uuid
 import redis
-
+from uuid import UUID
 import redis
 
 
@@ -76,7 +76,13 @@ async def get_current_user(token: str = Depends(get_token_from_cookie), session:
     user_id = payload.get("sub")
     if user_id is None:
         raise error
-    user_id = int(user_id)
+    try:
+        
+        user_id = UUID(user_id)
+        
+    except ValueError:
+        raise error
+    
     result = await session.execute(select(user_model.User).where(user_model.User.id == user_id))
     user = result.scalars().first()
     if user is None:

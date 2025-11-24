@@ -475,6 +475,8 @@
 
     async function mfaSetup(){
         showMFASetup = true
+        mfaError = "";
+        mfaCode = "";
 
     const response = await fetch(`${apiBase}/2fa/setup`, {
         method: "POST",
@@ -498,12 +500,13 @@
     }
     let mfaConfirm = $state("");
     let mfaCode = $state("");
+    let mfaError = $state("");
     let showDisable2FAModal = $state(false);
     let disable2FACode = $state("");
     let disable2FAError = $state("");
 
     async function confirm2FA(){
-            
+        mfaError = "";
 
     const response = await fetch(`${apiBase}/2fa/confirm`, {
         method: "POST",
@@ -517,7 +520,8 @@
     });
 
         if (!response.ok){
-
+            const errorData = await response.json();
+            mfaError = errorData.detail || "Failed to verify 2FA";
             return;
         }
 
@@ -526,6 +530,7 @@
 
         user2FA = true;
         showMFASetup = false;
+        mfaCode = "";
 
         return mfaConfirm
     }
@@ -2393,6 +2398,12 @@ let compromiseCount = $state(0);
                             
                             <div class="verification-section">
                                 <h4>Verify Setup</h4>
+                                {#if mfaError}
+                                    <div class="error-message" style="margin-bottom: 10px;">
+                                        <span class="error-icon">⚠</span>
+                                        <span>{mfaError}</span>
+                                    </div>
+                                {/if}
                                 <div class="verification-form">
                                     <input 
                                         type="text" 

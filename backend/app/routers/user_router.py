@@ -48,6 +48,7 @@ async def create_user(user_create: user_schema.CreateUser, session: PgAsyncSessi
         salt=user_create.salt,
         iv=user_create.iv
     )
+    
     session.add(db_user)
     await session.commit()
     await session.refresh(db_user)

@@ -3,10 +3,19 @@ from datetime import datetime, UTC
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
 from typing import List
 from app.database import Base
+import uuid
+from sqlalchemy.dialects.postgresql import UUID 
 
 class User(Base):
     __tablename__ = "user"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    id: Mapped[uuid.UUID] = mapped_column( # changed id to a UUID to increase security.
+        UUID(as_uuid=True), 
+        primary_key=True, 
+        default=uuid.uuid4, 
+        unique=True, 
+        nullable=False,
+        index=True
+    )
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now(UTC), server_default=func.now(), nullable=False)

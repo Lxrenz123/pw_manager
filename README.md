@@ -1,3 +1,8 @@
+# Password123 -  Password Manager
+- available at https://password123.pw
+
+
+
 ## Local Development Setup
 
 ### Clone the Repository
@@ -55,10 +60,6 @@ POSTGRES_DATABASE=pw_manager_db
 
 #CSRF HMAC
 CSRF_HMAC_SECRET=""
-
-
-
-
 ```
 Add Postgres user that is non-root and make sure it matches with database URL in `.env` and Alembic URL.
 

@@ -415,7 +415,7 @@ async function register(){
                 />
                 <div class="password-help">
                     <span class="help-text">
-                        // Use strong master key (min 8 chars)
+                        // Use strong master key (min 10 chars)
                     </span>
                 </div>
             </div>
