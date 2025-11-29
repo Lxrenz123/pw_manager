@@ -135,7 +135,7 @@
         return loginCrypto(data, password)
 
     } catch (error) {
-        // Handle any unexpected errors
+
         if (typeof result !== 'string' || result === '') {
             result = 'An unexpected error occurred. Please try again.';
         }
@@ -145,7 +145,7 @@
 
 // @ts-ignore
 window.onRecaptchaSuccess = function (token) {
-  // Option 1: direkt login() nochmal triggern
+
   login();
 };
 

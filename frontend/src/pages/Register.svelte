@@ -31,11 +31,11 @@ async function register(){
          result = "Invalid input"
          return
     }
-    // Reset previous messages
+  
     result = "";
     isSuccess = false;
 
-    // Validate password confirmation
+
     if (password !== confirmPassword) {
         result = "Passwords do not match";
         return;
@@ -86,16 +86,16 @@ async function register(){
             return;
         }
 
-        // Success!
+
         isSuccess = true;
         result = "User registered successfully! Redirecting to login...";
         
-        // Clear form
+   
         email = "";
         password = "";
         confirmPassword = "";
         
-        // Redirect to login after 2 seconds
+
         setTimeout(() => {
             window.location.href = "/login";
         }, 2000);
@@ -157,7 +157,7 @@ async function register(){
             inset 0 0 20px rgba(0, 170, 255, 0.05);
         backdrop-filter: blur(10px);
         position: relative;
-        /* Removed animated glow pulse for static background */
+
     }
 
 

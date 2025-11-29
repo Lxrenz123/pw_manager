@@ -1,13 +1,11 @@
 <script>
     import { onMount } from "svelte";
     import { apiBase } from "../script/api-base-url";
-    // @ts-ignore
     import { credentialSchema } from "../script/schema";
     import { userKey} from "../stores/user-key.js"
     import { get } from "svelte/store";
     import { navigate } from "svelte-routing";
     import { deriveKey } from "../script/crypto";
-    // @ts-ignore
     import { nonpassive } from "svelte/legacy";
     import * as openpgp from "openpgp";
 
@@ -21,15 +19,12 @@
 
     let error = $state("");
 
-    let userId = $state("");
     let userEmail = $state("");
     let userCreationDate = $state("");
     let userLastLogin = $state("");
 
     let user2FA = $state(false);
 
-    // @ts-ignore
-    let showProfileModal = $state(false);
     let showProfile = $state(false);
 
     let plaintext;
@@ -116,7 +111,7 @@
             if (ct.includes('application/json')) {
                 const data = await response.clone().json();
                 if (data?.detail && AUTO_LOGOUT_DETAILS.has(data.detail)) {
-                    // Avoid looping if we’re already hitting logout endpoint
+               
                     const reqUrl = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
 
                     userKey.set(null);
@@ -163,13 +158,13 @@
     }
     function isOptionalField(key){ return key === 'url' || key === 'note' || key === 'bankName'; }
     $effect(() => {
-        // Only show errors when user typed something in that field, or after submit attempt.
+
         const entries = Object.entries(secretErrors).filter(([k, v]) => {
             const val = (fieldValueByKey(k) || '').trim();
             if (isOptionalField(k)) {
-                return val.length > 0; // optional fields: show only if user typed
+                return val.length > 0; 
             }
-            // required fields: show if user typed or after attempt
+    
             return secretAttempted || val.length > 0;
         });
         visibleSecretErrors = entries;
@@ -339,15 +334,8 @@
         }
     }
 
-    // @ts-ignore
-    let credentialPWlength = $state("");
 
-    // @ts-ignore
-    async function generatePassword(){
 
-  
-
-    }
 
     let b64_OldSalt;
 
@@ -473,7 +461,6 @@
 
         user = await response.json();
 
-        userId = user.id;
         userEmail = user.email;
         userCreationDate = user.created_at;
         userLastLogin = user.last_login;
@@ -568,7 +555,7 @@
         secretId = null;
     }
 
-    // Vault deletion state
+
     let showDeleteVaultModal = $state(false);
     let isDeletingVault = $state(false);
     let vaultDeleteError = $state("");
@@ -663,10 +650,10 @@ let secretToEdit = $state(null);
 let editedSecretData = $state({});
 let isEditingSecret = $state(false);
 
-// Add this function to open the edit modal
+
 function openEditSecret(secret) {
     secretToEdit = secret;
-    // Clone the secret data for editing
+
     editedSecretData = JSON.parse(JSON.stringify(secret.data));
     showEditSecretModal = true;
 }
@@ -752,7 +739,7 @@ function cancelEditSecret() {
             return
         }
 
-        // Update the secret in the local array
+     
         const secretIndex = secrets.findIndex(s => s.id === secretToEdit.id);
         if (secretIndex !== -1) {
             secrets[secretIndex] = {
@@ -761,15 +748,12 @@ function cancelEditSecret() {
             };
         }
 
-        // Close modal and reset state
         showEditSecretModal = false;
         secretToEdit = null;
         editedSecretData = {};
 
     } catch (error) {
-   
-        
-        // Handle crypto-related errors that might indicate session issues
+  
         if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
     
             
@@ -855,19 +839,17 @@ $effect( () => {
         confirmMasterPW = "";
     }
 
-    // Export functionality removed.
 
 
     async function copyToClipboard(text, fieldName) {
         try {
             await navigator.clipboard.writeText(text);
-            // Show temporary feedback
-            // @ts-ignore
+
             const originalFieldName = fieldName;
-            // You could add a toast notification here if desired
+  
        
         } catch (error) {
-            // Fallback for older browsers
+ 
             const textArea = document.createElement('textarea');
             textArea.value = text;
             document.body.appendChild(textArea);
@@ -978,7 +960,7 @@ async function getSecretsOfVault(vaultId){
     }
     const encryptedSecrets = await response.json(); 
     selectedVaultId = vaultId;
-    showProfile = false; // Hide profile when vault is selected
+    showProfile = false; 
 
 
 
@@ -991,7 +973,7 @@ async function getSecretsOfVault(vaultId){
             
           const userKeyValue = get(userKey);
           
-          // Validate userKey before attempting decryption
+
           if (!userKeyValue || !(userKeyValue instanceof CryptoKey)) {
 
               
@@ -1032,8 +1014,7 @@ async function getSecretsOfVault(vaultId){
         } catch (err) {
             
      
-            
-            // Handle specific crypto errors that indicate session/key issues
+
             if (err.name === 'TypeError' && err.message.includes('CryptoKey')) {
                 
                 
@@ -1042,7 +1023,7 @@ async function getSecretsOfVault(vaultId){
                 return { ...secret, data: null };
             }
             
-            // Handle other crypto-related errors that might indicate session issues
+     
             if (err.name === 'OperationError' || err.name === 'InvalidAccessError') {
            
                 
@@ -1051,7 +1032,7 @@ async function getSecretsOfVault(vaultId){
                 return { ...secret, data: null };
             }
             
-            // For other errors, just log and return null data
+    
             return { ...secret, data: null };
 
         }
@@ -1109,7 +1090,7 @@ let compromiseCount = $state(0);
     async function addSecret(secret_type){
         secretAttempted = true;
         if(Object.keys(secretErrors).length>0) return;
-    // Only check for compromised passwords on credentials
+
     if (secret_type === "credential" && password && !userIgnoresCompromise) {
         const breachCount = await checkCompromise();
 
@@ -1252,21 +1233,19 @@ let compromiseCount = $state(0);
     secrets.push({ ...newSecret, data: decryptedData });
             
 
-    // Clear form fields based on secret type
         title = "";
         note = "";
         username = "";
         password = "";
         url = "";
-        
-        // Credit card fields
+  
         cardNumber = "";
         cardHolder = "";
         expiryDate = "";
         cvv = "";
         bankName = "";
         
-        // Reset compromise warning state
+
         showcompromiseWarning = false;
         userIgnoresCompromise = false;
         compromiseCount = 0;
@@ -1275,7 +1254,7 @@ let compromiseCount = $state(0);
     } catch (error) {
 
         
-        // Handle crypto-related errors that might indicate session issues
+  
         if (error.name === 'TypeError' && error.message.includes('CryptoKey')) {
  
             userKey.set(null);
@@ -1488,7 +1467,7 @@ let compromiseCount = $state(0);
                                 class="sidebar-input" 
                                 bind:value={title} 
                                 maxlength=32
-                                milength=1
+                                minlength=1
                             />
                             <textarea 
                                 placeholder="note_content" 
@@ -1496,7 +1475,7 @@ let compromiseCount = $state(0);
                                 bind:value={note}
                                 rows="3"
                                 maxlength=32
-                                milength=1
+                                minlength=1
                             ></textarea>
                             {#if visibleSecretErrors.length>0}
                                 <div class="field-error-group">
@@ -1905,7 +1884,7 @@ let compromiseCount = $state(0);
                                             </div>
                                         {/if}
                                     {:else if secret.data.cardNumber}
-                                        <!-- Credit card format -->
+                                
                                         <div class="field credential-field">
                                             <span class="field-label">cardholder:</span>
                                             <div class="field-value-with-actions">
@@ -1997,7 +1976,7 @@ let compromiseCount = $state(0);
             {/if}
         </section>
     </main>
-<!-- Add this after the MFA Setup Modal -->
+
 <!-- Edit Secret Modal -->
 {#if showEditSecretModal && secretToEdit}
     <div class="modal-overlay" onclick={cancelEditSecret}>

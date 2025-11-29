@@ -1,7 +1,4 @@
 # Password123 -  Password Manager
-- available at https://password123.pw
-
-
 
 ## Local Development Setup
 
