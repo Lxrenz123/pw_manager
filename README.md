@@ -38,7 +38,7 @@ cd backend/
 Create `.env` in `backend/`.
 - make sure to adjust these values
 ```bash
-JWT_SECRET_KEY=""
+JWT_SECRET_KEY="random string of 64 characters"
 ALGORITHM = "HS256"
 JWT_TOKEN_EXPIRE = 300
 DATABASE_URL = "postgresql+asyncpg://user:password@postgres:5432/pw_manager_db"
@@ -52,11 +52,14 @@ RECAPTCHAV2_SECRET_KEY = ""
 
 #DATABASE CONTAINER
 POSTGRES_USER=admin
-POSTGRES_PASSWORD=""
+POSTGRES_PASSWORD="password"
 POSTGRES_DATABASE=pw_manager_db
 
 #CSRF HMAC
-CSRF_HMAC_SECRET=""
+CSRF_HMAC_SECRET="random string of 64 characters"
+
+#LOGGING AND MONITORING
+GRAFANA_PASSWORD_ADMIN="password"
 ```
 Add Postgres user that is non-root and make sure it matches with database URL in `.env` and Alembic URL.
 
@@ -80,11 +83,11 @@ Initialize database into Postgres with Alembic:
 pip install alembic
 pip install asyncpg
 alembic stamp head
-alembic revision --autogenerate -m "fix database"
+alembic revision --autogenerate -m "database migration"
 alembic upgrade head
 ```
 
 ### Testing
 Test: http://localhost:8000/api/docs
 
-**Note**: Still don't know how to make cookies save in local development—this problem remains unclear...
+**Note**: Still don't know how to make access token and csrf token cookies save in local development, I tried changing the cookie properties but nothing worked as my browser kept blocking cookies because of cross site as frontend and backend runs on different ports
