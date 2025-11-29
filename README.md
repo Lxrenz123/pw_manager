@@ -1,12 +1,3 @@
-Here’s the **full documentation in clean Markdown format**, ready for your repository or as a standalone submission.
-
-
-# **Password123 — Project Documentation**
-
-Password Manager Web Application
-**Author:** Lorenz Ritsch
-
-
 ## **Project Overview**
 
 This project is a full-stack password manager consisting of:
