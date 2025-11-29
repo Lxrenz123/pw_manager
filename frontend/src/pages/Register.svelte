@@ -393,7 +393,7 @@ async function register(){
                     bind:value={password}
                     class="input"
                     required
-                    minlength="8"
+                    minlength="10"
                     maxlength=64
                 />
             </div>
@@ -410,7 +410,7 @@ async function register(){
                     bind:value={confirmPassword}
                     class="input"
                     required
-                    minlength="8"
+                    minlength="10"
                     maxlength=64
                 />
                 <div class="password-help">

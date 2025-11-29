@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Cookie, Header
+from fastapi import APIRouter, Depends, HTTPException, Cookie, Header, Request
 from app.schemas import user_schema, auth_schema, mfa_schema
 from app.database import PgAsyncSession
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,11 +7,15 @@ from app.models import user_model
 from app.twofa import generate_otp_secret, get_provisioning_uri, qrcode_data_url, verifiy_totp 
 from app.auth import get_current_user
 from app.csrf_protection import validate_csrf_token, csrf_error
+from app.limiter import limiter
+
+
 
 router = APIRouter(prefix="/2fa", tags=["2fa"])
 
 @router.post("/setup", response_model=mfa_schema.Setup)
-async def setup_2fa(session: PgAsyncSession, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+@limiter.limit("3/minute")
+async def setup_2fa(request: Request, session: PgAsyncSession, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
     
     if not validate_csrf_token(x_csrf_token, csrf_token):
         raise HTTPException(status_code=403, detail=csrf_error)
@@ -37,7 +41,8 @@ async def setup_2fa(session: PgAsyncSession, user: user_model.User = Depends(get
     return response
 
 @router.post("/confirm")
-async def confirm_2fa(session: PgAsyncSession, code: mfa_schema.Confirm, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+@limiter.limit("5/minute")
+async def confirm_2fa(request: Request, session: PgAsyncSession, code: mfa_schema.Confirm, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
     if not validate_csrf_token(x_csrf_token, csrf_token):
         raise HTTPException(status_code=403, detail=csrf_error)
     
@@ -59,7 +64,8 @@ async def confirm_2fa(session: PgAsyncSession, code: mfa_schema.Confirm, user: u
     return "2 Factor Authentication is now ready!"
 
 @router.post("/disable")
-async def disable_2fa(session: PgAsyncSession, code: mfa_schema.Confirm, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+@limiter.limit("5/minute")
+async def disable_2fa(request: Request, session: PgAsyncSession, code: mfa_schema.Confirm, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
         raise HTTPException(status_code=403, detail=csrf_error)

@@ -50,7 +50,7 @@ class UserLogin(BaseModel):
 
 
 class User(BaseModel):
-    id: int
+    id: UUID
     email: str
 
 class UpdateUserEmail(BaseModel):

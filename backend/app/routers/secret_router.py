@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Header, Cookie
+from fastapi import APIRouter, HTTPException, status, Depends, Header, Cookie, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -7,6 +7,7 @@ from app.database import PgAsyncSession
 from app.schemas import secret_schema
 from app.auth import get_current_user
 from app.csrf_protection import validate_csrf_token, csrf_error
+from app.limiter import limiter
 
 router = APIRouter(
     prefix="/secret",
@@ -15,7 +16,8 @@ router = APIRouter(
 
 
 @router.post("/{vault_id}/{secret_type}")
-async def create_secret(session: PgAsyncSession, vault_id: int, secret_type: str, secret_data: secret_schema.CreateSecret, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+@limiter.limit("30/minute")
+async def create_secret(request: Request, session: PgAsyncSession, vault_id: int, secret_type: str, secret_data: secret_schema.CreateSecret, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
         raise HTTPException(status_code=403, detail=csrf_error)
@@ -89,7 +91,8 @@ async def get_all_secrets(session: PgAsyncSession, user: user_model.User = Depen
 
 
 @router.patch("/{secret_id}")
-async def update_secret(session: PgAsyncSession, secret_id: int, secret_data: secret_schema.UpdateSecret, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+@limiter.limit("30/minute")
+async def update_secret(request: Request, session: PgAsyncSession, secret_id: int, secret_data: secret_schema.UpdateSecret, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
         raise HTTPException(status_code=403, detail="CSRF Protection")

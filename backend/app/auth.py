@@ -41,7 +41,7 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
-def create_access_token(user_id: int):
+def create_access_token(user_id: UUID):
     expire = datetime.now(UTC) + timedelta(minutes=int(TOKEN_EXPIRE_MINUTES))
 
     jti = str(uuid.uuid4())
@@ -49,7 +49,7 @@ def create_access_token(user_id: int):
     data = {"sub": str(user_id), "exp": expire, "jti": jti}
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
-def create_preauth_token(user_id: int):
+def create_preauth_token(user_id: UUID):
     expire = datetime.now(UTC) + timedelta(minutes=int(PREAUTH_TOKEN_EXPIRE))
     jti = str(uuid.uuid4())
     data = {"sub": str(user_id), "2fa": "pending", "exp": expire, "jti": jti}
@@ -64,6 +64,8 @@ async def get_current_user(token: str = Depends(get_token_from_cookie), session:
     except ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except JWTError:
+        raise error
+    except Exception:
         raise error
     
     if payload.get("2fa") == "pending":
@@ -101,7 +103,7 @@ def verify_preauth_token(preauth_token):
     if payload.get("2fa") != "pending":
         raise HTTPException(status_code=401, detail="Invalid preauth token")
     
-    return int(payload.get("sub"))
+    return UUID(payload.get("sub"))
     
 
 def check_pwned_password(password: str):
@@ -110,9 +112,16 @@ def check_pwned_password(password: str):
     prefix = hashed_password[:5]
     suffix = hashed_password[5:]
 
-    response = requests.get(f"https://api.pwnedpasswords.com/range/{prefix}", timeout=5)
-    if response.status_code != 200:
-        raise RuntimeError("Error fetching data from pwned API")
+    try:
+        response = requests.get(f"https://api.pwnedpasswords.com/range/{prefix}", timeout=5)
+        if response.status_code != 200:
+            return 0
+    except ConnectionError:
+        print("API down")
+        return 0
+    except Exception:
+        return 0
+    
 
     hashes = (line.split(":") for line in response.text.splitlines())
 

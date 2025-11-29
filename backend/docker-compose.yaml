@@ -10,6 +10,9 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DATABASE}
     restart: unless-stopped
+    networks:
+      - app_network
+
 
   api:
     image: api
@@ -29,18 +32,50 @@ services:
     depends_on:
      - postgres
     restart: unless-stopped
+    networks:
+      - app_network
 
-    logging:
-      driver: syslog
-      options:
-        syslog-address: "udp://172.19.0.1:514"  
-        tag: "api"                              
-        syslog-format: rfc5424micro          
-  
+
   redis:
     image: redis:8.2
     ports:
       - 127.0.0.1:6379:6379
+    networks:
+      - app_network
+    
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - 127.0.0.1:3000:3000
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD_ADMIN}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - monitoring
+ 
+
+  loki:
+    image: grafana/loki:2.9.0
+    networks:
+      - monitoring
+    
+  promtail:
+    image: grafana/promtail:2.9.0
+    volumes:
+      - /var/log/nginx:/var/log/nginx
+      - ./promtail-config.yaml:/etc/promtail/config.yaml
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on: 
+      - loki
+    networks:
+      - monitoring
 
 volumes:
   postgres_data:
+  grafana_data:
+
+networks:
+  monitoring:
+  app_network:

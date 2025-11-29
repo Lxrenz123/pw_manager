@@ -118,7 +118,7 @@
                 if (data?.detail && AUTO_LOGOUT_DETAILS.has(data.detail)) {
                     // Avoid looping if we’re already hitting logout endpoint
                     const reqUrl = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
-                    try { localStorage.removeItem('access_token'); } catch {}
+
                     userKey.set(null);
                     if (!reqUrl.includes('/user/logout')) {
              
@@ -138,7 +138,7 @@
         return emailRegex.test(email) && email.length <= 254;
     }
 
-    let vaultError = $state("");
+
     let secretErrors = $state({});
     let vaultAttempted = $state(false);
     let secretAttempted = $state(false);
@@ -208,7 +208,11 @@
                 body: JSON.stringify({"code": disable2FACode})
             });
 
-            if (!response.ok){
+            if (response.status == 422){
+
+                disable2FAError = "422 Unprocessable Content"
+                return;
+            } else if (!response.ok){
                 const errorData = await response.json();
                 disable2FAError = errorData.detail || "Failed to disable 2FA";
                 return;
@@ -310,7 +314,12 @@
 
             user = await response.json();
 
-            if (!response.ok){
+       if (response.status == 422){
+
+        errorstateEM = "422 Unprocessable Content"
+
+        return;
+        } else if (!response.ok){
                 errorstateEM = user.detail || "Failed to update email";
                 return;
             }
@@ -393,7 +402,12 @@
     })
     });
 
-        if (!response1.ok){
+     if (response.status == 422){
+
+        errorstatePW = "422 Unprocessable Content"
+
+        return;
+        } else if (!response1.ok){
             const errorData = await response1.json();
             errorstatePW = errorData.detail || "Failed to update password";
             return;
@@ -818,7 +832,14 @@ $effect( () => {
     });
 
     const data = await response.json()
-        if (!response.ok){
+
+
+        if (response.status == 422){
+
+        error = "422 Unprocessable Content"
+
+        return;
+        } else if (!response.ok){
             error = data.detail;
             return;
         }
@@ -903,10 +924,12 @@ async function getVaults(){
     }
 
 }
+let vaultadderror = $state("");
 
 async function addVault(){
+    vaultadderror = "";
     vaultAttempted = true;
-    if(vaultError || !vaultName.trim()) return;
+
     const response = await fetch(`${apiBase}/vault/`, {
         method: "POST",
         headers: {
@@ -916,11 +939,21 @@ async function addVault(){
         },
         body: JSON.stringify({name: vaultName.trim()})
     });
-    if (!response.ok){
 
-        return
-    }
     const newVault = await response.json();
+
+    if (response.status == 422){
+
+        vaultadderror = "422 Unprocessable Content"
+        return;
+    } else if (!response.ok){
+
+        vaultadderror = newVault.detail || "Could not add vault";
+        return;
+    }
+
+    vaultadderror = "";
+    
     vaults.push(newVault);
     vaultName = "";
     vaultAttempted = false;
@@ -937,6 +970,7 @@ async function getSecretsOfVault(vaultId){
  
         }
     })
+
 
     if (!response.ok){
 
@@ -1039,22 +1073,33 @@ async function checkCompromise() {
     const prefix = hashHex.slice(0, 5);
     const suffix = hashHex.slice(5);
 
-    const result = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`);
-    if (!result.ok) return;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-    const body = await result.text();
-    for (const line of body.split(/\r?\n/)) {
-        if (!line) continue;
-        const [hashSuffix, count] = line.split(':');
-        if (hashSuffix === suffix) {
-            return parseInt(count, 10);
+    try {
+        const result = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+            signal: controller.signal
+        });
+
+        if (!result.ok) return null;
+
+        const body = await result.text();
+        for (const line of body.split(/\r?\n/)) {
+            if (!line) continue;
+            const [hashSuffix, count] = line.split(':');
+            if (hashSuffix === suffix) {
+                return parseInt(count, 10);
+            }
         }
+
+        return 0;
+    } catch (_) {
+
+        return null;
+    } finally {
+        clearTimeout(timeoutId);
     }
-
-    return 0;
 }
-
-
 
 
 let showcompromiseWarning = $state(false);
@@ -1067,25 +1112,23 @@ let compromiseCount = $state(0);
     // Only check for compromised passwords on credentials
     if (secret_type === "credential" && password && !userIgnoresCompromise) {
         const breachCount = await checkCompromise();
-        if (breachCount > 0) {
+
+        if (breachCount == null){
+
+            
+        }
+        else if (breachCount > 0) {
             compromiseCount = breachCount;
             showcompromiseWarning = true;
-            return; // Stop here and show inline warning
+            return; 
         }
     }
-    
-    // If user acknowledged the warning or password is safe, proceed
+
     if (showcompromiseWarning && !userIgnoresCompromise) {
-        return; // Don't proceed if warning is shown but not acknowledged
+        return; 
     }
 
 
-
-
-
-
-    // Add a simple check to prevent infinite recursion
-    // @ts-ignore
     if (addSecret._running) {
         console.warn("addSecret already running, preventing recursion");
         return;
@@ -1145,7 +1188,7 @@ let compromiseCount = $state(0);
 
             
             userKey.set(null);
-            navigate("1");
+            navigate("/login");
             return;
         }
 
@@ -1157,7 +1200,7 @@ let compromiseCount = $state(0);
     secretKeyBytes
     )
 
-    // Use a safer approach for large data to avoid stack overflow
+
     function arrayBufferToBase64(buffer) {
         const bytes = new Uint8Array(buffer);
         let binary = '';
@@ -1188,8 +1231,13 @@ let compromiseCount = $state(0);
             secret_key_iv: secretKeyIvB64})
     })
 
-    if (!response.ok){
+    if (response.status == 422){
 
+        disable2FAError = "422 Unprocessable Content"
+        return;
+    }
+
+    if (!response.ok){
         return;
     }
 
@@ -1305,10 +1353,10 @@ let compromiseCount = $state(0);
                     bind:value={vaultName}
                     maxlength=64
                 />
-                {#if vaultError}
-                    <div class="field-error">{vaultError}</div>
+                {#if vaultadderror}
+                    <div class="field-error">{vaultadderror}</div>
                 {/if}
-                <button class="add-vault-btn" onclick={addVault} disabled={vaultName=="" || vaultError}>
+                <button class="add-vault-btn" onclick={addVault} disabled={vaultName==""}>
                     <span>CREATE</span>
                 </button>
             </div>
@@ -1827,7 +1875,7 @@ let compromiseCount = $state(0);
                                             <span class="field-label">password:</span>
                                             <div class="field-value-with-actions">
                                                 <span class="field-value password">
-                                                    {visiblePasswords.has(secret.id) ? secret.data.password : "•".repeat(secret.data.password.length)}
+                                                    {visiblePasswords.has(secret.id) ? secret.data.password : "•".repeat(10)}
                                                 </span>
                                                 <div class="password-actions">
                                                     <button class="toggle-btn" onclick={() => togglePasswordVisibility(secret.id)}>

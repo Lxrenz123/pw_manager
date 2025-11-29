@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Header, Cookie
+from fastapi import APIRouter, HTTPException, status, Depends, Header, Cookie, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from pydantic import BaseModel
@@ -6,7 +6,8 @@ from app.models import user_model, vault_model
 from app.database import PgAsyncSession
 from app.schemas import vault_schema
 from app.auth import get_current_user
-from app.csrf_protection import validate_csrf_token, csrf_error
+from app.csrf_protection import validate_csrf_token, csrf_error#
+from app.limiter import limiter
 
 router = APIRouter(
     prefix="/vault",
@@ -25,7 +26,8 @@ async def get_vaults(session: PgAsyncSession, current_user: user_model.User = De
 
     
 @router.post("/")
-async def create_vault(session: PgAsyncSession, vault_data: vault_schema.CreateVault, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+@limiter.limit("20/minute")
+async def create_vault(request: Request, session: PgAsyncSession, vault_data: vault_schema.CreateVault, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
     
     if not validate_csrf_token(x_csrf_token, csrf_token):
         raise HTTPException(status_code=403, detail=csrf_error)
@@ -47,7 +49,8 @@ async def create_vault(session: PgAsyncSession, vault_data: vault_schema.CreateV
     return vault
 
 @router.patch("/{vault_id}")
-async def update_vault(session: PgAsyncSession, vault_id: int, vault_data: vault_schema.UpdateVault, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+@limiter.limit("20/minute")
+async def update_vault(request: Request, session: PgAsyncSession, vault_id: int, vault_data: vault_schema.UpdateVault, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
    
     if not validate_csrf_token(x_csrf_token, csrf_token):
         raise HTTPException(status_code=403, detail=csrf_error)
@@ -69,7 +72,8 @@ async def update_vault(session: PgAsyncSession, vault_id: int, vault_data: vault
 
 
 @router.delete("/{vault_id}")
-async def delete_vault(session: PgAsyncSession, vault_id: int, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
+@limiter.limit("20/minute")
+async def delete_vault(request: Request, session: PgAsyncSession, vault_id: int, user: user_model.User = Depends(get_current_user), x_csrf_token: str = Header(None), csrf_token: str = Cookie(None)):
 
     if not validate_csrf_token(x_csrf_token, csrf_token):
         raise HTTPException(status_code=403, detail=csrf_error)

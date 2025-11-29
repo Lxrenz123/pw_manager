@@ -11,7 +11,6 @@ from typing import Union
 from app.recaptcha import verify_recaptchav3, verify_recaptchav2
 from app.limiter import limiter
 from app.csrf_protection import create_csrf_token, csrf_error
-from app.logger import logger
 from uuid import UUID
 
 domain = "password123.pw"
