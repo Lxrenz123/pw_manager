@@ -1,4 +1,11 @@
+Here’s the **full documentation in clean Markdown format**, ready for your repository or as a standalone submission.
+
+
 # **Password123 — Project Documentation**
+
+Password Manager Web Application
+**Author:** Lorenz Ritsch
+
 
 ## **Project Overview**
 
@@ -16,7 +23,6 @@ The live production deployment is available at:
 
 The application implements secure JWT authentication, CSRF protection, 2-factor authentication (TOTP), encrypted secret storage, rate-limiting, Google reCAPTCHA, and full observability through Loki + Grafana.
 
----
 
 ## **Technology Stack**
 
@@ -47,14 +53,13 @@ The application uses Docker Compose and includes:
 * `loki`
 * `promtail`
 
----
 
 ## **Directory Structure Overview**
 
 ### **Backend**
 
 | Path                              | Explanation                      |
-| --------------------------------- | -------------------------------- |
+|  | -- |
 | `/backend/app/models/`            | Database models                  |
 | `/backend/app/routers/`           | API endpoints                    |
 | `/backend/app/schema/`            | Pydantic validation schemas      |
@@ -69,7 +74,7 @@ The application uses Docker Compose and includes:
 ### **Frontend**
 
 | Path                                   | Explanation             |
-| -------------------------------------- | ----------------------- |
+| -- | -- |
 | `/frontend/src/`                       | Svelte application code |
 | `/frontend/src/script/api-base-url.js` | Defines API base URL    |
 
@@ -81,7 +86,6 @@ npm run build
 
 The output inside `dist/` is served by Nginx.
 
----
 
 # **NGINX Reverse Proxy Configuration**
 
@@ -107,7 +111,6 @@ location / {
 
 This ensures Svelte routing works correctly on reload.
 
----
 
 # **Local Development Setup**
 
@@ -118,7 +121,6 @@ git clone https://github.com/Lxrenz123/pw_manager.git
 cd pw_manager
 ```
 
----
 
 ## **2. Frontend Setup**
 
@@ -153,7 +155,6 @@ Update reCAPTCHA keys in:
 frontend/src/pages/Login.svelte
 ```
 
----
 
 ## **3. Backend Setup**
 
@@ -184,7 +185,6 @@ CSRF_HMAC_SECRET="random string"
 GRAFANA_PASSWORD_ADMIN="password"
 ```
 
----
 
 ## **4. Start Docker Stack**
 
@@ -208,7 +208,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO pw_manage
 GRANT CREATE ON SCHEMA public TO pw_manager_user;
 ```
 
----
 
 ## **5. Run Alembic Migrations**
 
@@ -226,7 +225,6 @@ alembic revision --autogenerate -m "database migration"
 alembic upgrade head
 ```
 
----
 
 ## **6. Test API**
 
@@ -234,7 +232,6 @@ FastAPI documentation UI is available at:
 
 👉 **[http://localhost:8000/api/docs](http://localhost:8000/api/docs)**
 
----
 
 ## **Important Note About Local Cookies**
 
