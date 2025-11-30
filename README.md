@@ -69,14 +69,11 @@ The application uses Docker Compose and includes:
 | `/frontend/src/`                       | Svelte application code |
 | `/frontend/src/script/api-base-url.js` | Defines API base URL    |
 
-Frontend static files are compiled using:
+Frontend static files are compiled into `dist/` using:
 
 ```bash
 npm run build
 ```
-
-The output inside `dist/` is served by Nginx.
-
 
 # **NGINX Reverse Proxy Configuration**
 
