@@ -1,8 +1,5 @@
 <script>
-    import { navigate } from "svelte-routing";
     import { apiBase } from "../script/api-base-url";
-    import { deriveKey } from "../script/crypto.js";
-    import { userKey } from "../stores/user-key.js";
     import { loginCrypto } from "../script/crypto.js";
     import { onMount } from "svelte";
 
@@ -11,7 +8,6 @@
 
     
     let preauth_token;
-    let userData;
     let mfaCode = $state("");
     let showMFA = $state(false);
     let showReCaptcha_v2 = $state(false);

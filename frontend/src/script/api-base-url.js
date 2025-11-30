@@ -1,1 +1,1 @@
-export const apiBase = "https://password123.pw/api" 
+export const apiBase = "/api" 

@@ -1,13 +1,10 @@
 <script>
     import { onMount } from "svelte";
     import { apiBase } from "../script/api-base-url";
-    import { credentialSchema } from "../script/schema";
     import { userKey} from "../stores/user-key.js"
     import { get } from "svelte/store";
     import { navigate } from "svelte-routing";
     import { deriveKey } from "../script/crypto";
-    import { nonpassive } from "svelte/legacy";
-    import * as openpgp from "openpgp";
 
     let newNote = $state({});
     let newCredential = $state({});
